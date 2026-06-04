@@ -173,8 +173,11 @@ textarea.f-in{resize:vertical;min-height:88px;line-height:1.65}
 <div class="toast" id="toast"></div>
 
 <script>
-var JOBS_KEY    = 'casting_jobs';
-var ENTRIES_KEY = 'casting_entries';
+/* ════════════════════════════════════════════
+   ⚙️ 設定：GASのウェブアプリURLをここに貼り付け
+   （Apps Scriptをデプロイして取得したURL）
+════════════════════════════════════════════ */
+var GAS_URL = 'https://script.google.com/macros/s/AKfycbx1RtttrO7t_qvOpzf-QU9sGjrLuTpSr1Y6kTySIwZeJwAgeOu5KJb7UExsPFslA6ARDw/exec';
 
 var SAMPLE = [
   {id:'j1',title:'自主短編映画「豆本（仮）」 出演者募集',client:'自主制作',product:'短編映画（20分尺・映画祭応募予定）',type:'film',slots:3,priority:'high',workdate:'7/4（土）・7/5（日）',deadline:'2026-06-10',budget:'1日1万〜1.5万円（交通費・リハーサル込）',followerRange:'',url:'',desc:'自主短編映画「豆本（仮）」の出演者を募集します。国内外映画祭への応募を目的とした作品です。\n\n【募集配役】\n■ 佐々木 杏珠（10歳・小学4年生）\n両親の離婚で母の実家に越してくる女の子。小学3〜5年生の方。幼く優しいイメージ。\n撮影：7/4・7/5　報酬：1日1.5万円（リハ込）＋保護者含む2名分交通費実費\n\n■ 佐々木 奈津代（45歳・杏珠の母）\n都内出版社勤務の編集者。見た目40〜46歳のキャリアウーマン。\n撮影：7/4・7/5　報酬：1日1万円（リハ込）＋交通費実費\n\n■ 佐々木 七子（76歳・杏珠の祖母）\n奈津代の母。見た目70〜76歳の優しいおばあちゃん役。\n撮影：7/4のみ　報酬：1日1.5万円（リハ込）＋交通費実費\n\n【オーディション】6/15（月）17〜21時 目黒駅徒歩8分\n【リハーサル】6/21（日）15:30〜18時 目黒駅徒歩10分\n【本番撮影】7/4 目黒駅付近 ／ 7/5 東武練馬付近',entryGuide:'🎭【必須】希望する配役を明記してください\n📅【必須】オーディション（6/15）・リハーサル（6/21）・撮影日の参加可否を記入してください\n📸【必須】写真付きの宣材資料（PDF推奨）を必ず添付してください\n👗【確認】衣装はご自前での対応になります',extraFields:['希望する配役（杏珠役・奈津代役・七子役）','オーディション6/15 参加可否','リハーサル6/21 参加可否','撮影全日程の参加可否'],tags:['映画','女性','都内','子役'],createdAt:'2026-05-20T00:00:00Z'},
@@ -184,9 +187,34 @@ var SAMPLE = [
 
 var SC = {pending:{lb:'確認待ち',col:'#B45309',bg:'#FEF7E0'},reviewing:{lb:'選考中',col:'#1D4ED8',bg:'#EFF6FF'},passed:{lb:'採用',col:'#059669',bg:'#ECFDF5'},rejected:{lb:'見送り',col:'#6B7280',bg:'#F9FAFB'}};
 
-function loadJobs(){try{var d=localStorage.getItem(JOBS_KEY);return d?JSON.parse(d):SAMPLE;}catch(e){return SAMPLE;}}
-function loadEntries(){try{var d=localStorage.getItem(ENTRIES_KEY);return d?JSON.parse(d):[];}catch(e){return[];}}
-function saveEntries(a){try{localStorage.setItem(ENTRIES_KEY,JSON.stringify(a));}catch(e){}}
+/* ── GASからデータ取得（クラウド） ── */
+function gasConfigured(){ return GAS_URL && GAS_URL.indexOf('http') === 0; }
+
+function fetchData(){
+  return fetch(GAS_URL + '?type=all')
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if(res.ok){
+        jobs    = (res.data.jobs && res.data.jobs.length) ? res.data.jobs : SAMPLE;
+        entries = res.data.entries || [];
+      }
+      return true;
+    })
+    .catch(function(){
+      // 通信失敗時はサンプルを表示
+      jobs = SAMPLE; entries = [];
+      return false;
+    });
+}
+
+/* ── GASへエントリー1件を送信 ── */
+function postEntry(entry){
+  return fetch(GAS_URL, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({action:'addEntry', entry:entry})
+  }).then(function(r){return r.json();});
+}
 
 var curF='all', curJid=null, eForm={}, eFiles=[], jobs=[], entries=[];
 
@@ -212,10 +240,8 @@ document.querySelectorAll('.chip').forEach(function(el){
   });
 });
 
-/* ── 描画 ── */
+/* ── 描画（jobs/entriesはグローバル変数を使用） ── */
 function render(){
-  jobs    = loadJobs();
-  entries = loadEntries();
   var active = jobs.filter(function(j){return !isExpired(j);});
   var vis    = active.filter(function(j){return curF==='all'||j.priority===curF;});
   var now    = new Date();
@@ -480,7 +506,7 @@ function renderFileList(){
   });
 }
 
-/* ── 送信 ── */
+/* ── 送信（GASへエントリーを送信） ── */
 function submitEntry(){
   var name = (eForm.name || '').trim(), email = (eForm.email || '').trim();
   var ok = true;
@@ -489,28 +515,56 @@ function submitEntry(){
   if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ errMail.classList.add('on'); ok = false; } else errMail.classList.remove('on');
   if(!ok){ showToast('⚠️ 必須項目を入力してください'); return; }
 
-  var arr = loadEntries();
+  if(!gasConfigured()){ showToast('⚠️ サーバー未設定のため送信できません（管理者にお問い合わせください）'); return; }
+
+  // 添付の合計サイズチェック（GASの処理上限・タイムアウト対策：合計20MBまで）
+  var totalSize = 0;
+  for(var i=0;i<eFiles.length;i++){ totalSize += (eFiles[i].size||0); }
+  if(totalSize > 20971520){
+    showToast('⚠️ 添付ファイルの合計が大きすぎます（20MB以内にしてください）');
+    return;
+  }
+
   var entry = {id:'e'+Date.now(), jobId:curJid, status:'pending', submittedAt:new Date().toISOString(),
     name:name, email:email, phone:eForm.phone||'', dob:eForm.dob||'', height:eForm.height||'',
     tiktok:eForm.tiktok||'', tt_followers:eForm.tt_followers||'', tt_avg10:eForm.tt_avg10||'',
     ig_url:eForm.ig_url||'', ig_followers:eForm.ig_followers||'', ig_reach10:eForm.ig_reach10||'',
     note:eForm.note||'', extra:eForm.extra||{}, attachments:eFiles.slice()};
-  arr.push(entry);
-  saveEntries(arr);
-  sessionStorage.setItem('eml_'+curJid, email);
-  entries = arr;
-  closeEov(); render();
-  showToast('✅ エントリーを送信しました。担当者よりご連絡いたします。');
+
+  var sendBtn = document.querySelector('.btn-s');
+  if(sendBtn){ sendBtn.disabled = true; sendBtn.textContent = '送信中...'; }
+
+  postEntry(entry).then(function(res){
+    if(res && res.ok){
+      sessionStorage.setItem('eml_'+curJid, email);
+      closeEov();
+      // 最新データを取り直して再描画
+      fetchData().then(render);
+      showToast('✅ エントリーを送信しました。担当者よりご連絡いたします。');
+    }else{
+      if(sendBtn){ sendBtn.disabled = false; sendBtn.textContent = '送信する ✅'; }
+      showToast('⚠️ 送信に失敗しました。時間をおいて再度お試しください。');
+    }
+  }).catch(function(){
+    if(sendBtn){ sendBtn.disabled = false; sendBtn.textContent = '送信する ✅'; }
+    showToast('⚠️ 通信エラーが発生しました。電波状況をご確認ください。');
+  });
 }
 
-/* ── クリーンアップ ── */
-function cleanup(){
-  var j = loadJobs(), u = j.filter(function(x){return !isExpired(x);});
-  if(u.length !== j.length){ try{localStorage.setItem(JOBS_KEY, JSON.stringify(u));}catch(e){} }
+/* ── 初期化（GASからデータ取得して描画） ── */
+function init(){
+  if(!gasConfigured()){
+    // GAS未設定時はサンプルを表示
+    jobs = SAMPLE; entries = [];
+    render();
+    return;
+  }
+  fetchData().then(render);
 }
 
-cleanup(); render();
-setInterval(function(){cleanup(); render();}, 60000);
+init();
+// 60秒ごとに最新データへ自動更新
+setInterval(function(){ if(gasConfigured()){ fetchData().then(render); } }, 60000);
 </script>
 </body>
 </html>
