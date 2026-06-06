@@ -34,7 +34,7 @@ a{text-decoration:none;color:inherit}
 .lc-label{font-size:12px;font-weight:700;color:var(--t2);margin-bottom:6px;display:block}
 .lc-input{width:100%;padding:12px 14px;border:1.5px solid var(--g200);border-radius:var(--rs);font-size:14px;color:var(--tx);margin-bottom:14px;font-family:inherit;-webkit-appearance:none;appearance:none}
 .lc-input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.12);outline:none}
-.lc-check{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.lc-check{display:flex;align-items:center;justify-content:flex-start;gap:10px;margin-bottom:4px}
 .lc-check input{width:16px;height:16px;cursor:pointer;flex-shrink:0;accent-color:var(--blue)}
 .lc-check label{font-size:13px;color:var(--t2);cursor:pointer}
 .lc-btn{width:100%;padding:14px;background:var(--navy);color:var(--w);border-radius:var(--rs);font-size:14px;font-weight:800;margin-top:14px;cursor:pointer;border:none;font-family:inherit}
@@ -291,6 +291,15 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
               <input class="fi" id="fq" placeholder="例：希望配役,身長（cm）,スケジュール参加可否">
               <span style="font-size:11px;color:var(--t3);margin-top:3px;display:block">↑ エントリーフォームに記述欄として追加されます</span>
             </div>
+            <div class="fg-full fgrp" style="background:var(--blt);border:1px solid var(--bmd);border-radius:var(--rs);padding:14px">
+              <label class="flbl" style="font-size:13px;color:var(--navy)">📸 コンポジ情報の入力（オーディション用プロフィール）</label>
+              <span style="font-size:11px;color:var(--t3);margin:2px 0 8px;display:block">年齢・身長・体重・靴サイズ・居住/活動エリア・自己PR・写真などの詳細プロフィールをエントリー時に収集します</span>
+              <select class="fi" id="fcomp">
+                <option value="none">不要（コンポジ欄を表示しない）</option>
+                <option value="optional">任意（入力できるが必須ではない）</option>
+                <option value="required">必須（入力しないと応募できない）</option>
+              </select>
+            </div>
           </div>
           <div class="btn-row">
             <button class="btn btn-g" id="clear-btn">クリア</button>
@@ -316,6 +325,15 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
         </select>
       </div>
       <div class="srch-w"><span class="srch-ic">🔍</span><input class="fsrch" id="fsch" placeholder="名前・メールで検索"></div>
+      <div class="frow">
+        <select class="fsel" id="fsort">
+          <option value="new">並び替え：新しい順</option>
+          <option value="old">並び替え：古い順</option>
+          <option value="tt_followers">並び替え：TikTokフォロワー多い順</option>
+          <option value="ig_followers">並び替え：IGフォロワー多い順</option>
+          <option value="name">並び替え：名前順</option>
+        </select>
+      </div>
       <div class="vrow">
         <button class="vbtn on" data-view="list">📋 リスト</button>
         <button class="vbtn" data-view="kanban">📌 カンバン</button>
@@ -353,6 +371,7 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
       <div class="card">
         <div style="font-size:14px;font-weight:800;color:var(--tx);margin-bottom:6px">🤖 Anthropic APIキー</div>
         <div style="font-size:13px;color:var(--t3);margin-bottom:14px;line-height:1.6">テキスト貼り付け・PDF解析のAI機能を使うためのAPIキーを設定します。<br><a href="https://console.anthropic.com/" target="_blank" style="color:var(--blue)">console.anthropic.com</a> で取得できます。キーはこのブラウザにのみ保存されます。</div>
+        <div style="background:var(--alt);border:1px solid #FCD34D;border-radius:var(--rs);padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--g800);line-height:1.6">⚠️ AI解析は <strong>https:// のサイト（GitHub Pages 等）でのみ動作</strong>します。パソコンに保存したファイルを直接開いた場合（file://）は、ブラウザのセキュリティ制限で動作しません。</div>
         <div class="fgrp" style="margin-bottom:14px">
           <label class="flbl">APIキー（sk-ant-...）</label>
           <input class="fi" id="api-key-input" type="password" placeholder="sk-ant-api03-...">
@@ -630,7 +649,10 @@ function renderAJ(){
     html+=
       '<div class="aj'+(ex?' ex':'')+'">'
       +'<div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:4px"><div class="aj-t">'+esc(j.title)+'</div>'
-      +'<button class="btn btn-g" data-jid="'+esc(j.id)+'" style="font-size:12px;padding:6px 14px;background:var(--rlt);color:var(--red);border:none;flex:none">削除</button></div>'
+      +'<div style="display:flex;gap:6px;flex:none">'
+        +'<button class="aj-edit" data-edit="'+esc(j.id)+'" style="font-size:12px;padding:6px 14px;background:var(--blt);color:var(--blue);border:none;border-radius:var(--rs);font-weight:700;cursor:pointer">編集</button>'
+        +'<button data-jid="'+esc(j.id)+'" style="font-size:12px;padding:6px 14px;background:var(--rlt);color:var(--red);border:none;border-radius:var(--rs);font-weight:700;cursor:pointer">削除</button>'
+      +'</div></div>'
       +'<div class="aj-s">'+esc(j.client)+(j.product?' ／ '+esc(j.product):'')+'</div>'
       +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'
         +'<span style="display:inline-block;padding:3px 9px;border-radius:5px;font-size:11px;font-weight:800;background:'+(ex?'var(--g100)':'var(--glt)')+';color:'+(ex?'var(--g400)':'var(--green)')+'">'+( ex?'期限切れ':'募集中')+'</span>'
@@ -645,6 +667,73 @@ function renderAJ(){
   el.querySelectorAll('[data-jid]').forEach(function(btn){
     btn.addEventListener('click',function(){delJob(this.dataset.jid);});
   });
+  el.querySelectorAll('[data-edit]').forEach(function(btn){
+    btn.addEventListener('click',function(){startEditJob(this.dataset.edit);});
+  });
+}
+
+/* 編集中の案件ID（null＝新規登録モード） */
+var editingJobId = null;
+
+/* 案件をフォームに読み込んで編集モードに */
+function startEditJob(id){
+  var j = jobs.find(function(x){return x.id===id;});
+  if(!j) return;
+  editingJobId = id;
+  document.getElementById('ft').value  = j.title||'';
+  document.getElementById('fc').value  = j.client||'';
+  document.getElementById('fp').value  = j.product||'';
+  document.getElementById('ftype').value = j.type||'sns';
+  document.getElementById('fsl').value = j.slots||1;
+  document.getElementById('fpr').value = j.priority||'high';
+  document.getElementById('fw').value  = j.workdate||'';
+  document.getElementById('fdl').value = j.deadline||'';
+  document.getElementById('fbu').value = j.budget||'';
+  document.getElementById('ffr').value = j.followerRange||'';
+  document.getElementById('fpf').value = j.platforms||'';
+  document.getElementById('fur').value = j.url||'';
+  document.getElementById('ftg').value = (j.tags||[]).join(', ');
+  document.getElementById('fds').value = j.desc||'';
+  document.getElementById('feg').value = j.entryGuide||'';
+  document.getElementById('fq').value  = (j.extraFields||[]).join(', ');
+  document.getElementById('fcomp').value = j.composite || 'none';
+  // 手動入力タブに切り替え
+  document.querySelectorAll('.itab').forEach(function(b){b.classList.toggle('on',b.dataset.it==='manual');});
+  ['pdf','text','manual'].forEach(function(k){var bx=document.getElementById('it-'+k);if(bx)bx.style.display=k==='manual'?'block':'none';});
+  // ボタン表記を「更新」に
+  var addBtn = document.getElementById('add-job-btn');
+  addBtn.textContent = '案件を更新する ✏️';
+  addBtn.style.background = 'var(--amber)';
+  // 編集中バナー
+  var box = document.getElementById('it-manual');
+  if(box && !document.getElementById('edit-banner')){
+    var b = document.createElement('div');
+    b.id = 'edit-banner';
+    b.style.cssText = 'background:var(--alt);border:1.5px solid #FCD34D;border-radius:var(--rs);padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--g800);display:flex;justify-content:space-between;align-items:center;gap:10px';
+    b.innerHTML = '<span>✏️ <strong>「'+esc(j.title).slice(0,30)+'」</strong>を編集中</span><button id="cancel-edit" style="background:var(--g100);border:1px solid var(--g300);border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;color:var(--g600)">編集をやめる</button>';
+    box.insertBefore(b, box.firstChild);
+    document.getElementById('cancel-edit').addEventListener('click', cancelEditJob);
+  }
+  showSub('jobs');
+  window.scrollTo({top:0,behavior:'smooth'});
+  showToast('✏️ 編集モードにしました');
+}
+
+/* 編集モード解除 */
+function cancelEditJob(){
+  editingJobId = null;
+  clearJobForm();
+  var addBtn = document.getElementById('add-job-btn');
+  addBtn.textContent = '案件を登録する →';
+  addBtn.style.background = '';
+  var b = document.getElementById('edit-banner');
+  if(b) b.remove();
+}
+
+function clearJobForm(){
+  ['ft','fc','fp','fsl','fw','fdl','fbu','ffr','fpf','fur','ftg','fds','feg','fq'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('ftype').value='sns';document.getElementById('fpr').value='high';
+  var fcomp=document.getElementById('fcomp');if(fcomp)fcomp.value='none';
 }
 
 function updJSel(){
@@ -656,32 +745,52 @@ function updJSel(){
 }
 
 document.getElementById('clear-btn').addEventListener('click', function(){
-  ['ft','fc','fp','fsl','fw','fdl','fbu','ffr','fpf','fur','ftg','fds','feg','fq'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
-  document.getElementById('ftype').value='sns';document.getElementById('fpr').value='high';
+  cancelEditJob();
 });
 
 document.getElementById('add-job-btn').addEventListener('click', function(){
   var t=(document.getElementById('ft').value||'').trim();
   if(!t){showToast('⚠️ 案件名は必須です');return;}
   var qStr=(document.getElementById('fq').value||'').trim();
-  var job={
-    id:'j'+Date.now(),title:t,client:(document.getElementById('fc').value||'').trim(),
+  var data={
+    title:t,client:(document.getElementById('fc').value||'').trim(),
     product:(document.getElementById('fp').value||'').trim(),type:document.getElementById('ftype').value,
     slots:parseInt(document.getElementById('fsl').value)||1,priority:document.getElementById('fpr').value,
     workdate:(document.getElementById('fw').value||'').trim(),deadline:document.getElementById('fdl').value||null,
     budget:(document.getElementById('fbu').value||'').trim(),followerRange:(document.getElementById('ffr').value||'').trim(),
+    platforms:(document.getElementById('fpf').value||'').trim(),
     url:(document.getElementById('fur').value||'').trim(),
     tags:((document.getElementById('ftg').value||'').trim()).split(',').map(function(x){return x.trim();}).filter(Boolean),
     desc:(document.getElementById('fds').value||'').trim(),entryGuide:(document.getElementById('feg').value||'').trim(),
     extraFields:qStr?qStr.split(',').map(function(x){return x.trim();}).filter(Boolean):[],
-    createdAt:new Date().toISOString()
+    composite:document.getElementById('fcomp').value
   };
-  jobs.unshift(job);
-  ['ft','fc','fp','fsl','fw','fdl','fbu','ffr','fpf','fur','ftg','fds','feg','fq'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
-  renderAJ();updJSel();
-  pushJobs(function(ok){
-    showToast(ok ? '✅ 案件を登録しました' : '⚠️ サーバー保存に失敗しました（GAS URLを確認してください）');
-  });
+
+  if(editingJobId){
+    // ── 更新モード ──
+    var idx = jobs.findIndex(function(x){return x.id===editingJobId;});
+    if(idx !== -1){
+      // 既存のid・createdAtは維持
+      data.id = jobs[idx].id;
+      data.createdAt = jobs[idx].createdAt || new Date().toISOString();
+      jobs[idx] = data;
+    }
+    cancelEditJob();
+    renderAJ();updJSel();
+    pushJobs(function(ok){
+      showToast(ok ? '✅ 案件を更新しました' : '⚠️ サーバー保存に失敗しました');
+    });
+  }else{
+    // ── 新規登録モード ──
+    data.id = 'j'+Date.now();
+    data.createdAt = new Date().toISOString();
+    jobs.unshift(data);
+    clearJobForm();
+    renderAJ();updJSel();
+    pushJobs(function(ok){
+      showToast(ok ? '✅ 案件を登録しました' : '⚠️ サーバー保存に失敗しました（GAS URLを確認してください）');
+    });
+  }
 });
 
 function delJob(id){
@@ -710,9 +819,10 @@ function buildPrompt(txt){
     +'entryGuide: newline-separated bullet points each starting with an emoji.\n'
     +'extraFields: array of questions for the entry form.\n'
     +'type: sns|film|model|other. priority: high|mid|low. deadline: YYYY-MM-DD or empty.\n'
+    +'composite: set "required" if the job is acting/modeling/CM/film and needs a profile (age, height, area, photos); "optional" if a profile may help; "none" for pure SNS/PR jobs.\n'
     +'Output: {"title":"","client":"","product":"","type":"sns","slots":1,"priority":"mid",'
     +'"workdate":"","deadline":"","budget":"","followerRange":"","url":"","tags":"","desc":"",'
-    +'"entryGuide":"","extraFields":[]}\n\nJob text:\n---\n'+txt+'\n---';
+    +'"entryGuide":"","extraFields":[],"composite":"none"}\n\nJob text:\n---\n'+txt+'\n---';
 }
 
 function extractJSON(raw){
@@ -754,6 +864,7 @@ function fillForm(p){
   sv('fbu',p.budget);sv('ffr',p.followerRange);sv('fpf',p.platforms||'');sv('fur',p.url);
   sv('ftg',p.tags);sv('fds',p.desc);sv('feg',p.entryGuide);
   if(Array.isArray(p.extraFields)&&p.extraFields.length)document.getElementById('fq').value=p.extraFields.join(', ');
+  if(p.composite&&['none','optional','required'].indexOf(p.composite)!==-1){var fcomp=document.getElementById('fcomp');if(fcomp)fcomp.value=p.composite;}
 }
 
 document.getElementById('pdf-input').addEventListener('change', async function(){
@@ -789,6 +900,7 @@ document.getElementById('parse-btn').addEventListener('click', async function(){
 document.getElementById('fj').addEventListener('change', renderEnt);
 document.getElementById('fs').addEventListener('change', renderEnt);
 document.getElementById('fsch').addEventListener('input', renderEnt);
+document.getElementById('fsort').addEventListener('change', renderEnt);
 document.querySelectorAll('.vbtn').forEach(function(btn){
   btn.addEventListener('click',function(){
     curView=this.dataset.view;
@@ -810,8 +922,19 @@ function renderEnt(){
   var fj=document.getElementById('fj').value;
   var fs=document.getElementById('fs').value;
   var sc=(document.getElementById('fsch').value||'').trim();
+  var sortEl=document.getElementById('fsort');
+  var sort=sortEl?sortEl.value:'new';
   var fl=entries.filter(function(e){
     return (fj==='all'||e.jobId===fj)&&(fs==='all'||e.status===fs)&&(!sc||(e.name||'').includes(sc)||(e.email||'').includes(sc));
+  });
+
+  // 並び替え
+  fl.sort(function(a,b){
+    if(sort==='old')  return new Date(a.submittedAt)-new Date(b.submittedAt);
+    if(sort==='name') return (a.name||'').localeCompare(b.name||'','ja');
+    if(sort==='tt_followers') return (parseInt(b.tt_followers)||0)-(parseInt(a.tt_followers)||0);
+    if(sort==='ig_followers') return (parseInt(b.ig_followers)||0)-(parseInt(a.ig_followers)||0);
+    return new Date(b.submittedAt)-new Date(a.submittedAt); // new（既定）
   });
 
   var stHtml='';
@@ -894,10 +1017,10 @@ function renderKan(fl,el){
 }
 
 /* GASでエントリー1件を更新 */
-function updateEntryOnGas(entry){
+function updateEntryOnGas(entry, notify){
   if(!gasConfigured())return;
   fetch(GAS_URL, {method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body:JSON.stringify({action:'updateEntry', entry:entry})}).catch(function(){});
+    body:JSON.stringify({action:'updateEntry', entry:entry, notify:(notify===true)})}).catch(function(){});
 }
 
 /* ════════════════════════════════════════
@@ -958,6 +1081,34 @@ function openDov(eid){
     html+='</div>';
   }
 
+  // コンポジ情報
+  var comp = e.composite || {};
+  var compKeys = Object.keys(comp).filter(function(k){return comp[k] && String(comp[k]).trim();});
+  if(compKeys.length){
+    var compLabels = {
+      comp_age:'年齢', comp_weight:'体重', comp_shoe:'靴サイズ',
+      comp_area:'居住エリア', comp_active_area:'活動可能エリア',
+      comp_mood:'得意な表情・雰囲気', comp_genre:'得意なジャンル',
+      comp_skill:'趣味・特技', comp_history:'出演歴・活動歴'
+    };
+    var compUnits = { comp_age:'歳', comp_weight:'kg', comp_shoe:'cm' };
+    html+='<div class="ins-box"><div class="ins-t">📸 コンポジ情報</div>';
+    // 数値系はグリッド、テキスト系は縦
+    html+='<div class="ins-g">';
+    ['comp_age','comp_weight','comp_shoe','comp_area','comp_active_area'].forEach(function(k){
+      if(comp[k] && String(comp[k]).trim()){
+        html+='<div class="ins-c"><div class="ins-l">'+compLabels[k]+'</div><div class="ins-v" style="font-size:13px">'+esc(comp[k])+(compUnits[k]||'')+'</div></div>';
+      }
+    });
+    html+='</div>';
+    ['comp_mood','comp_genre','comp_skill','comp_history'].forEach(function(k){
+      if(comp[k] && String(comp[k]).trim()){
+        html+='<div style="margin-top:10px"><div style="font-size:12px;font-weight:700;color:var(--t3);margin-bottom:4px">'+compLabels[k]+'</div><div class="text-ans" style="margin-bottom:0">'+esc(comp[k])+'</div></div>';
+      }
+    });
+    html+='</div>';
+  }
+
   if(e.note)html+='<div class="ins-box"><div class="ins-t">📝 自己PR・補足</div><div class="text-ans">'+esc(e.note)+'</div></div>';
 
   if(atts.length){
@@ -1004,8 +1155,20 @@ function openDov(eid){
   document.querySelectorAll('.st-b').forEach(function(btn){
     btn.addEventListener('click',function(){
       var e3=entries.find(function(x){return x.id===this.dataset.eid;}.bind(this));
-      if(!e3)return;e3.status=this.dataset.st;updBadge();renderEnt();renderDash();
-      updateEntryOnGas(e3);
+      if(!e3)return;
+      var newStatus=this.dataset.st;
+      var prevStatus=e3.status;
+      e3.status=newStatus;updBadge();renderEnt();renderDash();
+
+      // 採用/見送りに「変化」したときは通知メール送信を確認
+      var notify=false;
+      if(newStatus!==prevStatus && (newStatus==='passed'||newStatus==='rejected')){
+        var label = newStatus==='passed' ? '採用' : '見送り';
+        notify = confirm('応募者「'+(e3.name||'')+'」さんに【'+label+'】の通知メールを送信しますか？\n\n「OK」で自動送信、「キャンセル」でメールなしでステータスのみ変更します。');
+      }
+      updateEntryOnGas(e3, notify);
+      if(notify) showToast('📧 通知メールを送信しました');
+
       document.querySelectorAll('.st-b').forEach(function(b){
         var c=SC[b.dataset.st]||SC.pending;var on=b.dataset.st===e3.status;
         b.style.background=on?c.bg:'';b.style.color=on?c.col:'';b.style.borderColor=on?c.col:'';
@@ -1043,12 +1206,21 @@ function getExportData(){
   var fl=entries.filter(function(e){return jid==='all'||e.jobId===jid;});
   var allEK=[];
   fl.forEach(function(e){if(e.extra)Object.keys(e.extra).forEach(function(k){if(allEK.indexOf(k)===-1)allEK.push(k);});});
-  var headers=['名前','メール','電話','生年月日','身長','TikTok URL','TTフォロワー','TT平均再生','IG URL','IGフォロワー','IG平均リーチ','案件名','ステータス','応募日時','自己PR','添付数','添付リンク','管理メモ'].concat(allEK);
+  var compCols=[
+    ['comp_age','コンポジ:年齢'],['comp_weight','コンポジ:体重'],['comp_shoe','コンポジ:靴サイズ'],
+    ['comp_area','コンポジ:居住エリア'],['comp_active_area','コンポジ:活動可能エリア'],
+    ['comp_mood','コンポジ:得意な表情'],['comp_genre','コンポジ:得意ジャンル'],
+    ['comp_skill','コンポジ:趣味特技'],['comp_history','コンポジ:出演歴']
+  ];
+  var headers=['名前','メール','電話','生年月日','身長','TikTok URL','TTフォロワー','TT平均再生','IG URL','IGフォロワー','IG平均リーチ','案件名','ステータス','応募日時','自己PR','添付数','添付リンク','管理メモ']
+    .concat(compCols.map(function(c){return c[1];})).concat(allEK);
   var rows=fl.map(function(e){
     var j=jobs.find(function(x){return x.id===e.jobId;});
     var attLinks=(e.attachments||[]).map(function(a){return a.url||'';}).filter(Boolean).join(' / ');
+    var comp=e.composite||{};
     var base=[e.name||'',e.email||'',e.phone||'',e.dob||'',e.height||'',e.tiktok||'',e.tt_followers||'',e.tt_avg10||'',e.ig_url||'',e.ig_followers||'',e.ig_reach10||'',j?j.title:'',SC[e.status]?SC[e.status].lb:'',fmtD(e.submittedAt),e.note||'',(e.attachments||[]).length,attLinks,e.adminNote||''];
-    return base.concat(allEK.map(function(k){return(e.extra||{})[k]||'';}));
+    var compVals=compCols.map(function(c){return comp[c[0]]||'';});
+    return base.concat(compVals).concat(allEK.map(function(k){return(e.extra||{})[k]||'';}));
   });
   return {headers:headers,rows:rows,count:fl.length};
 }
