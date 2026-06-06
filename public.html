@@ -264,15 +264,24 @@ function render(){
     var me = savedMail ? entries.find(function(e){return e.jobId===j.id && e.email===savedMail;}) : null;
     var priHtml = j.priority==='high' ? '<span class="ph">急募</span>' : j.priority==='mid' ? '<span class="pm">通常</span>' : '<span class="pl">低</span>';
 
+    // 採用人数に達したか（採用ステータスの人数でカウント）
+    var passedCount = entries.filter(function(e){return e.jobId===j.id && e.status==='passed';}).length;
+    var isFull = j.slots && passedCount >= j.slots;
+
     var remHtml = '';
     if(dl !== null){
       var rc = dl<=3?'rur':dl<=7?'rwa':'rok';
       remHtml = '<div class="remain '+rc+'">残り'+dl+'日</div>';
     }
 
-    var footHtml = me
-      ? '<div class="e-done">'+sbBadge(me.status)+'<div class="e-done-n">担当者よりご連絡いたします</div></div>'
-      : '<button class="e-btn e-can" data-jid="'+esc(j.id)+'">エントリーする →</button>';
+    var footHtml;
+    if(me){
+      footHtml = '<div class="e-done">'+sbBadge(me.status)+'<div class="e-done-n">担当者よりご連絡いたします</div></div>';
+    }else if(isFull){
+      footHtml = '<div class="e-done"><span class="pl" style="padding:6px 14px">🈵 募集終了</span><div class="e-done-n">採用枠が埋まりました</div></div>';
+    }else{
+      footHtml = '<button class="e-btn e-can" data-jid="'+esc(j.id)+'">エントリーする →</button>';
+    }
 
     var pillHtml = '';
     if(j.budget || j.followerRange || j.url){
@@ -407,6 +416,33 @@ function buildForm(j){
     });
   }
 
+  /* コンポジ情報（オーディション用プロフィール） */
+  var compMode = j.composite || 'none';
+  if(compMode === 'optional' || compMode === 'required'){
+    var req = (compMode === 'required');
+    var ct = document.createElement('div'); ct.className = 'sec-t'; ct.style.marginTop = '6px';
+    ct.textContent = '📸 コンポジ情報' + (req ? '（必須）' : '（任意）');
+    el.appendChild(ct);
+
+    var note = document.createElement('div');
+    note.style.cssText = 'background:#FFFBEB;border:1px solid #FCD34D;border-radius:var(--rs);padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--g800);line-height:1.6';
+    note.innerHTML = 'オーディション・キャスティングの判断に使うプロフィール情報です。'+(req?'<strong style="color:var(--amber)">この案件では入力必須です。</strong>':'分かる範囲でご記入ください。')+'<br>※ 写真は下の「ファイル・画像の添付」から、顔がはっきり分かる写真・全身写真など複数枚の添付を推奨します。';
+    el.appendChild(note);
+
+    // 基本情報（年齢・体重・靴サイズ・居住エリア・活動可能エリア）
+    var g = document.createElement('div'); g.className = 'grid2'; el.appendChild(g);
+    addCompField(g, '年齢', 'number', 'comp_age', '25', '歳', req);
+    addCompField(g, '体重', 'number', 'comp_weight', '55', 'kg', false);
+    addCompField(g, '靴のサイズ', 'number', 'comp_shoe', '25.0', 'cm', false);
+    addCompField(g, '居住エリア', 'text', 'comp_area', '例：東京都世田谷区', '', req);
+    addCompFieldFull(el, '活動可能エリア', 'text', 'comp_active_area', '例：東京・神奈川・千葉', false);
+    // 自己PR・特徴
+    addCompTextarea(el, '得意な表情・雰囲気', 'comp_mood', '例：笑顔／クール／親しみやすい など', false);
+    addCompTextarea(el, '得意なジャンル', 'comp_genre', '例：CM／ドラマ／ファッション など', false);
+    addCompTextarea(el, '趣味・特技', 'comp_skill', '例：ダンス／英会話／殺陣 など', false);
+    addCompTextarea(el, '出演歴・活動歴（経験がある場合のみ）', 'comp_history', '過去の出演作品・活動など', false);
+  }
+
   /* 自己PR */
   addSecTitle(el, '📝 自己PR・補足');
   addTextarea(el, '自己PR・活動歴・補足事項', 'note', false);
@@ -482,6 +518,45 @@ function addErrDiv(parent, id){
   parent.appendChild(d);
 }
 
+/* ── コンポジ専用フィールド（eForm.composite に格納） ── */
+function setComp(key, val){ if(!eForm.composite) eForm.composite = {}; eForm.composite[key] = val; }
+
+function addCompField(parent, label, type, key, ph, suffix, required){
+  var wrap = document.createElement('div'); wrap.className = 'field';
+  var lbl = document.createElement('label'); lbl.className = 'f-l'; lbl.textContent = label;
+  if(required){ var rq=document.createElement('span'); rq.className='f-req'; rq.textContent=' *'; lbl.appendChild(rq); }
+  var inp;
+  if(suffix){
+    var fw=document.createElement('div'); fw.className='f-wr';
+    inp=document.createElement('input'); inp.className='f-in'; inp.type=type; inp.placeholder=ph; inp.style.paddingRight='40px';
+    inp.setAttribute('data-comp', key);
+    var sx=document.createElement('span'); sx.className='f-sx'; sx.textContent=suffix;
+    fw.appendChild(inp); fw.appendChild(sx);
+    wrap.appendChild(lbl); wrap.appendChild(fw);
+  }else{
+    inp=document.createElement('input'); inp.className='f-in'; inp.type=type; inp.placeholder=ph;
+    inp.setAttribute('data-comp', key);
+    wrap.appendChild(lbl); wrap.appendChild(inp);
+  }
+  inp.addEventListener('input', function(){ setComp(key, this.value); });
+  parent.appendChild(wrap);
+}
+
+function addCompFieldFull(parent, label, type, key, ph, required){
+  addCompField(parent, label, type, key, ph, '', required);
+}
+
+function addCompTextarea(parent, label, key, ph, required){
+  var wrap = document.createElement('div'); wrap.className = 'field';
+  var lbl = document.createElement('label'); lbl.className = 'f-l'; lbl.textContent = label;
+  if(required){ var rq=document.createElement('span'); rq.className='f-req'; rq.textContent=' *'; lbl.appendChild(rq); }
+  var ta = document.createElement('textarea'); ta.className='f-in'; ta.rows=2; ta.placeholder=ph;
+  ta.setAttribute('data-comp', key);
+  ta.addEventListener('input', function(){ setComp(key, this.value); });
+  wrap.appendChild(lbl); wrap.appendChild(ta);
+  parent.appendChild(wrap);
+}
+
 /* ── ファイル処理 ── */
 function handleFiles(files){
   var arr = Array.from(files), rem = 5 - eFiles.length, add = arr.slice(0, rem);
@@ -517,6 +592,16 @@ function submitEntry(){
 
   if(!gasConfigured()){ showToast('⚠️ サーバー未設定のため送信できません（管理者にお問い合わせください）'); return; }
 
+  // コンポジ必須チェック
+  var curJob = jobs.find(function(x){return x.id===curJid;});
+  if(curJob && curJob.composite === 'required'){
+    var c = eForm.composite || {};
+    if(!(c.comp_age && String(c.comp_age).trim()) || !(c.comp_area && String(c.comp_area).trim())){
+      showToast('⚠️ コンポジ情報（年齢・居住エリア）は必須です');
+      return;
+    }
+  }
+
   // 添付の合計サイズチェック（GASの処理上限・タイムアウト対策：合計20MBまで）
   var totalSize = 0;
   for(var i=0;i<eFiles.length;i++){ totalSize += (eFiles[i].size||0); }
@@ -529,7 +614,7 @@ function submitEntry(){
     name:name, email:email, phone:eForm.phone||'', dob:eForm.dob||'', height:eForm.height||'',
     tiktok:eForm.tiktok||'', tt_followers:eForm.tt_followers||'', tt_avg10:eForm.tt_avg10||'',
     ig_url:eForm.ig_url||'', ig_followers:eForm.ig_followers||'', ig_reach10:eForm.ig_reach10||'',
-    note:eForm.note||'', extra:eForm.extra||{}, attachments:eFiles.slice()};
+    note:eForm.note||'', extra:eForm.extra||{}, composite:eForm.composite||{}, attachments:eFiles.slice()};
 
   var sendBtn = document.querySelector('.btn-s');
   if(sendBtn){ sendBtn.disabled = true; sendBtn.textContent = '送信中...'; }
@@ -537,10 +622,15 @@ function submitEntry(){
   postEntry(entry).then(function(res){
     if(res && res.ok){
       sessionStorage.setItem('eml_'+curJid, email);
+      var jobTitle = '';
+      var jj = jobs.find(function(x){return x.id===curJid;});
+      if(jj) jobTitle = jj.title;
       closeEov();
-      // 最新データを取り直して再描画
       fetchData().then(render);
-      showToast('✅ エントリーを送信しました。担当者よりご連絡いたします。');
+      showDoneScreen(res.entry || entry, jobTitle);
+    }else if(res && res.duplicate){
+      if(sendBtn){ sendBtn.disabled = false; sendBtn.textContent = '送信する ✅'; }
+      showToast('⚠️ この案件には既に同じメールアドレスで応募済みです');
     }else{
       if(sendBtn){ sendBtn.disabled = false; sendBtn.textContent = '送信する ✅'; }
       showToast('⚠️ 送信に失敗しました。時間をおいて再度お試しください。');
@@ -549,6 +639,34 @@ function submitEntry(){
     if(sendBtn){ sendBtn.disabled = false; sendBtn.textContent = '送信する ✅'; }
     showToast('⚠️ 通信エラーが発生しました。電波状況をご確認ください。');
   });
+}
+
+/* ── 応募完了画面（受付番号・次のステップを表示） ── */
+function showDoneScreen(entry, jobTitle){
+  var ov = document.getElementById('eov');
+  var efi = document.getElementById('efi');
+  document.querySelector('#eov .m-title').textContent = '✅ 応募が完了しました';
+  efi.innerHTML =
+    '<div style="text-align:center;padding:10px 4px 4px">'+
+      '<div style="font-size:54px;margin-bottom:8px">🎉</div>'+
+      '<div style="font-size:18px;font-weight:800;color:var(--tx);margin-bottom:6px">ご応募ありがとうございます</div>'+
+      '<div style="font-size:13px;color:var(--t3);line-height:1.7;margin-bottom:18px">エントリーを受け付けました。<br>ご登録のメールアドレスに受付確認メールをお送りしました。</div>'+
+    '</div>'+
+    '<div style="background:var(--g50);border:1px solid var(--g200);border-radius:var(--rs);padding:16px;margin-bottom:16px">'+
+      '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--g200)"><span style="font-size:12px;color:var(--t3);font-weight:700">応募案件</span><span style="font-size:13px;color:var(--tx);font-weight:700;text-align:right;max-width:60%">'+esc(jobTitle)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--g200)"><span style="font-size:12px;color:var(--t3);font-weight:700">受付番号</span><span style="font-size:13px;color:var(--tx);font-weight:700">'+esc(entry.id)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;padding:6px 0"><span style="font-size:12px;color:var(--t3);font-weight:700">お名前</span><span style="font-size:13px;color:var(--tx);font-weight:700">'+esc(entry.name)+'</span></div>'+
+    '</div>'+
+    '<div style="background:var(--blt);border:1px solid var(--bmd);border-radius:var(--rs);padding:14px 16px;margin-bottom:18px">'+
+      '<div style="font-size:12px;font-weight:800;color:var(--blue);margin-bottom:8px">📌 今後の流れ</div>'+
+      '<div style="font-size:13px;color:var(--t2);line-height:1.8">1. 担当者が応募内容を確認します<br>2. 選考結果をメールでご連絡します<br>3. 結果が出るまでお待ちください</div>'+
+    '</div>'+
+    '<button class="btn btn-s" id="done-close" style="width:100%">閉じる</button>';
+  document.getElementById('done-close').addEventListener('click', function(){
+    closeEov();
+    document.querySelector('#eov .m-title').textContent = '📝 エントリーフォーム';
+  });
+  ov.classList.add('on');
 }
 
 /* ── 初期化（GASからデータ取得して描画） ── */
