@@ -22,7 +22,7 @@ html{-webkit-text-size-adjust:100%}
 body{font-family:'Hiragino Kaku Gothic ProN','Hiragino Sans',system-ui,sans-serif;
   background:var(--g100);color:var(--tx);line-height:1.6;min-height:100vh;-webkit-font-smoothing:antialiased}
 button{font-family:inherit;cursor:pointer;border:none;-webkit-tap-highlight-color:transparent}
-input,select,textarea{font-family:inherit;-webkit-appearance:none;outline:none}
+input:not([type=checkbox]),select,textarea{font-family:inherit;-webkit-appearance:none;outline:none}
 a{text-decoration:none;color:inherit}
 /* Login */
 #login-page{display:flex;align-items:center;justify-content:center;min-height:100vh;
@@ -34,9 +34,10 @@ a{text-decoration:none;color:inherit}
 .lc-label{font-size:12px;font-weight:700;color:var(--t2);margin-bottom:6px;display:block}
 .lc-input{width:100%;padding:12px 14px;border:1.5px solid var(--g200);border-radius:var(--rs);font-size:14px;color:var(--tx);margin-bottom:14px;font-family:inherit;-webkit-appearance:none;appearance:none}
 .lc-input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.12);outline:none}
-.lc-check{display:flex;align-items:center;justify-content:flex-start;gap:10px;margin-bottom:4px}
-.lc-check input{width:16px;height:16px;cursor:pointer;flex-shrink:0;accent-color:var(--blue)}
-.lc-check label{font-size:13px;color:var(--t2);cursor:pointer}
+.lc-check{display:flex;align-items:center;justify-content:flex-start;gap:10px;margin-bottom:4px;background:var(--g50);border:1.5px solid var(--g200);border-radius:var(--rs);padding:12px 14px;cursor:pointer;transition:all .15s}
+.lc-check:hover{border-color:var(--bmd);background:var(--blt)}
+.lc-check input[type=checkbox]{width:20px;height:20px;cursor:pointer;flex-shrink:0;accent-color:var(--blue);-webkit-appearance:checkbox;appearance:checkbox;margin:0}
+.lc-check label{font-size:14px;color:var(--t2);cursor:pointer;font-weight:600;user-select:none;flex:1}
 .lc-btn{width:100%;padding:14px;background:var(--navy);color:var(--w);border-radius:var(--rs);font-size:14px;font-weight:800;margin-top:14px;cursor:pointer;border:none;font-family:inherit}
 .lc-btn:hover{background:#1557B0}
 .lc-err{background:var(--rlt);color:var(--red);border-radius:var(--rs);padding:10px 14px;font-size:13px;font-weight:600;margin-top:10px;display:none}
@@ -191,10 +192,10 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
     <input class="lc-input" id="l-em" type="email" placeholder="メールアドレスを入力" autocomplete="email">
     <label class="lc-label">パスワード</label>
     <input class="lc-input" id="l-pw" type="password" placeholder="パスワードを入力" autocomplete="current-password">
-    <div class="lc-check">
+    <label class="lc-check" for="l-rem" style="margin-top:4px;margin-bottom:14px">
       <input type="checkbox" id="l-rem" checked>
-      <label for="l-rem">ログイン状態を保持する</label>
-    </div>
+      <span style="font-size:14px;color:var(--t2);font-weight:600;user-select:none">ログイン状態を保持する</span>
+    </label>
     <div class="lc-err" id="l-err">メールアドレスまたはパスワードが正しくありません</div>
     <button class="lc-btn" id="login-btn">ログイン →</button>
   </div>
