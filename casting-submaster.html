@@ -218,6 +218,7 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
     <div class="sb-lbl">メニュー</div>
     <button class="sb-btn on" data-sub="dash"><span class="sb-ic">📊</span>ダッシュボード</button>
     <button class="sb-btn" data-sub="jobs"><span class="sb-ic">📋</span>案件管理</button>
+    <button class="sb-btn" data-sub="pub"><span class="sb-ic">📡</span>配信管理</button>
     <button class="sb-btn" data-sub="ent" style="position:relative"><span class="sb-ic">📩</span>エントリー管理<span class="sb-dot" id="sb-dot">0</span></button>
     <button class="sb-btn" data-sub="dl"><span class="sb-ic">📥</span>ダウンロード</button>
     <button class="sb-btn" data-sub="cfg"><span class="sb-ic">⚙️</span>設定</button>
@@ -227,6 +228,7 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
     <div class="mob-tabs">
       <button class="mtab on" data-sub="dash">📊</button>
       <button class="mtab" data-sub="jobs">📋</button>
+      <button class="mtab" data-sub="pub">📡</button>
       <button class="mtab" data-sub="ent">📩</button>
       <button class="mtab" data-sub="dl">📥</button>
       <button class="mtab" data-sub="cfg">⚙️</button>
@@ -320,6 +322,16 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
       <div id="aj-list"></div>
     </div>
 
+    <!-- 配信管理 -->
+    <div class="sub" id="sub-pub">
+      <div class="shd">📡 配信管理</div>
+      <div style="background:var(--blt);border:1px solid var(--bmd);border-radius:var(--rs);padding:12px 14px;margin-bottom:16px;font-size:13px;color:var(--t2);line-height:1.7">
+        案件管理で登録した案件を、チャンネル（公開ページ）に配信します。<br>
+        配信時に金額・タイトル・説明など条件を変えて公開できます。元案件のデータは変わりません。
+      </div>
+      <div id="pub-job-list"></div>
+    </div>
+
     <!-- エントリー管理 -->
     <div class="sub" id="sub-ent">
       <div class="frow">
@@ -410,6 +422,18 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
 
 <div class="toast" id="toast"></div>
 
+<!-- 配信モーダル -->
+<div class="ov" id="pub-ov">
+  <div class="modal">
+    <div class="m-bar"></div>
+    <div class="m-head">
+      <div class="m-title">📡 チャンネルに配信する</div>
+      <button class="m-cls" id="pub-ov-cls">✕</button>
+    </div>
+    <div class="m-body" id="pub-fi"></div>
+  </div>
+</div>
+
 <script>
 /* ════════════════════════════════════════
    定数
@@ -432,9 +456,9 @@ var DEFAULT_JOBS = [];
    状態
 ════════════════════════════════════════ */
 var currentUser     = null;
-var currentGroupIds = [];   // 担当グループID一覧（複数）
-var currentGroupId  = null; // 案件登録時に使う選択中グループID
-var groups = [], jobs = [], entries = [];
+var currentGroupIds = [];
+var currentGroupId  = null;
+var groups = [], jobs = [], entries = [], channels = [], channelJobs = [];
 var curSub = 'dash', curView = 'list', dragId = null;
 
 /* ════════════════════════════════════════
@@ -452,6 +476,12 @@ function pullData(cb){
         var allJobs    = res.data.jobs    || [];
         var allEntries = res.data.entries || [];
         groups         = res.data.groups  || [];
+        channels       = res.data.channels || [];
+        // channelJobsはサブマスターの担当グループのものだけ
+        var allCj = res.data.channel_jobs || [];
+        channelJobs = currentGroupIds.length
+          ? allCj.filter(function(cj){ return currentGroupIds.indexOf(cj.groupId||'')!==-1 || !cj.groupId; })
+          : allCj;
         if(currentGroupIds.length){
           jobs    = allJobs.filter(function(j){return currentGroupIds.indexOf(j.groupId||'')!==-1;});
           entries = allEntries.filter(function(e){return currentGroupIds.indexOf(e.groupId||'')!==-1;});
@@ -577,7 +607,7 @@ document.getElementById('logout-btn').addEventListener('click', function(){
 function initAdmin(){
   checkApiNotice();
   pullData(function(){
-    updBadge(); updJSel(); renderDash(); renderAJ(); renderEnt();
+    updBadge(); updJSel(); renderDash(); renderAJ(); renderEnt(); renderPubList();
     updGroupSel();
   });
   setInterval(function(){
@@ -585,9 +615,14 @@ function initAdmin(){
       updBadge();
       if(curSub==='ent') renderEnt();
       if(curSub==='dash') renderDash();
+      if(curSub==='pub') renderPubList();
     });
   }, 15000);
 }
+
+/* pub-ovのバインド */
+document.getElementById('pub-ov').addEventListener('click',function(e){if(e.target===this)closePubOv();});
+document.getElementById('pub-ov-cls').addEventListener('click',closePubOv);
 
 /* 配信先グループセレクタを担当グループで更新 */
 function updGroupSel(){
@@ -624,6 +659,7 @@ function showSub(s){
   document.querySelectorAll('.sb-btn,.mtab').forEach(function(b){b.classList.toggle('on',b.dataset.sub===s);});
   if(s==='ent'){ pullData(function(){renderEnt();}); }
   if(s==='dash'){ pullData(function(){renderDash();}); }
+  if(s==='pub'){ pullData(function(){renderPubList();}); }
   if(s==='dl')updJSel();
   if(s==='cfg')checkApiNotice();
 }
@@ -838,6 +874,171 @@ function delJob(id){
   renderAJ();renderEnt();renderDash();updJSel();
   pushJobs(function(){ pushEntries(function(){}); });
   showToast('🗑️ 削除しました');
+}
+
+/* ════════════════════════════════════════
+   配信管理（チャンネルへの配信・取り下げ）
+════════════════════════════════════════ */
+
+/* 配信管理タブ：案件ごとに「配信する」ボタンを表示 */
+function renderPubList(){
+  var el=document.getElementById('pub-job-list'); if(!el) return;
+  if(!jobs.length){
+    el.innerHTML='<div class="empty"><div class="empty-ic">📋</div><div class="empty-t">案件がまだありません</div><div style="font-size:13px;margin-top:6px;color:var(--t3)">案件管理から案件を登録してください</div></div>';
+    return;
+  }
+  var html='';
+  jobs.forEach(function(j){
+    var myCjs=channelJobs.filter(function(cj){return cj.sourceJobId===j.id;});
+    html+=
+      '<div style="background:var(--w);border-radius:var(--rs);border:1px solid var(--g200);padding:14px;margin-bottom:10px;box-shadow:var(--sh)">'
+        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">'
+          +'<div><div style="font-size:14px;font-weight:800;color:var(--tx)">'+esc(j.title)+'</div>'
+            +'<div style="font-size:12px;color:var(--t3);margin-top:2px">'+esc(j.client||'')+(j.product?' ／ '+esc(j.product):'')+'</div>'
+          +'</div>'
+          +'<button class="pub-btn" data-jid="'+esc(j.id)+'" style="background:var(--teal);color:#fff;border:none;border-radius:var(--rs);padding:8px 16px;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;white-space:nowrap">📡 配信する</button>'
+        +'</div>'
+        +(myCjs.length?
+          '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--g100)">'
+            +'<div style="font-size:12px;font-weight:700;color:var(--t2);margin-bottom:6px">配信中（'+myCjs.length+'チャンネル）</div>'
+            +myCjs.map(function(cj){
+              var ch=channels.find(function(x){return x.id===cj.channelId;});
+              return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;background:var(--teal);background:rgba(8,145,178,.08);border-radius:6px;margin-bottom:4px">'
+                +'<div style="min-width:0">'
+                  +'<span style="font-size:12px;font-weight:700;color:var(--teal)">📡 '+esc(ch?ch.name:'不明チャンネル')+'</span>'
+                  +(cj.budget?'<span style="font-size:11px;color:var(--t3);margin-left:8px">報酬：'+esc(cj.budget)+'</span>':'')
+                +'</div>'
+                +'<button data-unpub-ch="'+esc(cj.channelId)+'" data-unpub-jid="'+esc(j.id)+'" style="background:var(--rlt);color:var(--red);border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">取り下げ</button>'
+              +'</div>';
+            }).join('')
+          +'</div>'
+          : '<div style="font-size:12px;color:var(--t3);margin-top:4px">まだどのチャンネルにも配信していません</div>'
+        )
+      +'</div>';
+  });
+  el.innerHTML=html;
+  el.querySelectorAll('.pub-btn').forEach(function(b){
+    b.addEventListener('click',function(){openPubModal(this.dataset.jid);});
+  });
+  el.querySelectorAll('[data-unpub-ch]').forEach(function(b){
+    b.addEventListener('click',function(){unpublishJob(this.dataset.unpubCh,this.dataset.unpubJid);});
+  });
+}
+
+/* 配信モーダルを開く */
+function openPubModal(jid){
+  var j=jobs.find(function(x){return x.id===jid;}); if(!j)return;
+  var fi=document.getElementById('pub-fi'); if(!fi)return;
+
+  // このジョブの既存配信情報
+  var myCjs=channelJobs.filter(function(cj){return cj.sourceJobId===jid;});
+
+  var chOptions=channels.map(function(ch){
+    var exists=myCjs.find(function(cj){return cj.channelId===ch.id;});
+    return '<option value="'+esc(ch.id)+'"'+(exists?' data-exists="1"':'')+'>'+esc(ch.name)+(exists?' ✅配信中':'')+'</option>';
+  }).join('');
+
+  fi.innerHTML=
+    '<div style="background:var(--g50);border-radius:var(--rs);padding:12px 14px;margin-bottom:16px;border:1px solid var(--g200)">'
+      +'<div style="font-size:14px;font-weight:800;color:var(--tx)">'+esc(j.title)+'</div>'
+      +'<div style="font-size:12px;color:var(--t3);margin-top:2px">元の報酬：'+esc(j.budget||'未設定')+'</div>'
+    +'</div>'
+    +'<div class="fgrp" style="margin-bottom:14px"><label class="flbl">配信先チャンネル <span style="color:var(--red)">*</span></label>'
+      +(channels.length
+        ? '<select class="fi" id="pub-ch-sel">'+chOptions+'</select>'
+        : '<div style="font-size:13px;color:var(--red);padding:10px;background:var(--rlt);border-radius:var(--rs)">チャンネルがありません。メインマスターでチャンネルを作成してください。</div>'
+      )
+    +'</div>'
+    +'<div style="font-size:13px;font-weight:800;color:var(--t2);margin-bottom:10px">📝 公開時の条件を設定（変更したい項目だけ入力）</div>'
+    +'<div class="fgrp" style="margin-bottom:12px"><label class="flbl">タイトル（変更する場合）</label>'
+      +'<input class="fi" id="pub-title" placeholder="空欄＝元案件のタイトルをそのまま使用" value="'+esc(j.title)+'"></div>'
+    +'<div class="fgrp" style="margin-bottom:12px"><label class="flbl">報酬・金額（変更する場合）</label>'
+      +'<input class="fi" id="pub-budget" placeholder="例：12万円／¥120,000（税込）" value="'+esc(j.budget||'')+'"></div>'
+    +'<div class="fgrp" style="margin-bottom:12px"><label class="flbl">案件詳細（変更する場合）</label>'
+      +'<textarea class="fi" id="pub-desc" rows="4" placeholder="空欄＝元案件の詳細をそのまま使用">'+esc(j.desc||'')+'</textarea></div>'
+    +'<div class="fgrp" style="margin-bottom:18px"><label class="flbl">エントリー前の注意事項（変更する場合）</label>'
+      +'<textarea class="fi" id="pub-guide" rows="2" placeholder="空欄＝元案件の注意事項をそのまま使用">'+esc(j.entryGuide||'')+'</textarea></div>'
+    +'<div class="btn-row">'
+      +'<button class="btn btn-g" onclick="closePubOv()">キャンセル</button>'
+      +'<button class="btn" style="background:var(--teal);color:#fff" id="pub-submit-btn" data-jid="'+esc(jid)+'">このチャンネルに配信する 📡</button>'
+    +'</div>';
+
+  document.getElementById('pub-submit-btn').addEventListener('click', function(){
+    submitPublish(this.dataset.jid);
+  });
+  document.getElementById('pub-ov').classList.add('on');
+}
+
+function closePubOv(){ document.getElementById('pub-ov').classList.remove('on'); }
+
+function submitPublish(jid){
+  var j=jobs.find(function(x){return x.id===jid;}); if(!j)return;
+  var chSel=document.getElementById('pub-ch-sel');
+  if(!chSel||!chSel.value){showToast('⚠️ 配信先チャンネルを選択してください');return;}
+  var channelId=chSel.value;
+  var title =(document.getElementById('pub-title').value||'').trim()||j.title;
+  var budget=(document.getElementById('pub-budget').value||'').trim()||j.budget||'';
+  var desc  =(document.getElementById('pub-desc').value||'').trim()||j.desc||'';
+  var guide =(document.getElementById('pub-guide').value||'').trim()||j.entryGuide||'';
+
+  var cj={
+    id:'cj'+Date.now(),
+    channelId: channelId,
+    sourceJobId: jid,
+    submasterId: currentUser?currentUser.id:'',
+    groupId: j.groupId||currentGroupId||'',
+    // 公開バージョンのフィールド（元案件を引き継ぎつつ上書き）
+    title: title, client: j.client||'', product: j.product||'',
+    type: j.type||'sns', slots: j.slots||1, priority: j.priority||'mid',
+    workdate: j.workdate||'', deadline: j.deadline||null,
+    budget: budget, followerRange: j.followerRange||'',
+    url: j.url||'', tags: j.tags||[], desc: desc,
+    entryGuide: guide, extraFields: j.extraFields||[],
+    composite: j.composite||'none',
+    publishedAt: new Date().toISOString()
+  };
+
+  // GASに保存
+  if(!gasConfigured()){showToast('⚠️ GAS URLが設定されていません');return;}
+  fetch(GAS_URL, {method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({action:'publishJob', channelJob:cj})})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if(res&&res.ok){
+        // ローカルにも反映
+        var exists=false;
+        for(var i=0;i<channelJobs.length;i++){
+          if(channelJobs[i].channelId===channelId&&channelJobs[i].sourceJobId===jid){
+            channelJobs[i]=cj; exists=true; break;
+          }
+        }
+        if(!exists) channelJobs.push(cj);
+        closePubOv();
+        renderPubList();
+        var ch=channels.find(function(x){return x.id===channelId;});
+        showToast('✅ 「'+(ch?ch.name:'チャンネル')+'」に配信しました');
+      }else{showToast('⚠️ 配信に失敗しました');}
+    })
+    .catch(function(){showToast('⚠️ 通信エラーが発生しました');});
+}
+
+function unpublishJob(channelId, sourceJobId){
+  var ch=channels.find(function(x){return x.id===channelId;});
+  if(!confirm('「'+(ch?ch.name:'このチャンネル')+'」からこの案件を取り下げますか？'))return;
+  if(!gasConfigured()){showToast('⚠️ GAS URLが設定されていません');return;}
+  fetch(GAS_URL, {method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({action:'unpublishJob', channelId:channelId, sourceJobId:sourceJobId})})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if(res&&res.ok){
+        channelJobs=channelJobs.filter(function(cj){
+          return !(cj.channelId===channelId&&cj.sourceJobId===sourceJobId);
+        });
+        renderPubList();
+        showToast('🗑️ 取り下げました');
+      }else{showToast('⚠️ 取り下げに失敗しました');}
+    })
+    .catch(function(){showToast('⚠️ 通信エラーが発生しました');});
 }
 
 /* ════════════════════════════════════════
