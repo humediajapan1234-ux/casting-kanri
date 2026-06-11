@@ -233,6 +233,7 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
     <div class="sb-lbl">メニュー</div>
     <button class="sb-btn on" data-sub="dash"><span class="sb-ic">📊</span>ダッシュボード</button>
     <button class="sb-btn" data-sub="grp"><span class="sb-ic">👑</span>グループ管理</button>
+    <button class="sb-btn" data-sub="sub"><span class="sb-ic">🔑</span>サブマスター管理</button>
     <button class="sb-btn" data-sub="jobs"><span class="sb-ic">📋</span>案件管理</button>
     <button class="sb-btn" data-sub="ent" style="position:relative"><span class="sb-ic">📩</span>エントリー管理<span class="sb-dot" id="sb-dot">0</span></button>
     <button class="sb-btn" data-sub="dl"><span class="sb-ic">📥</span>ダウンロード</button>
@@ -243,6 +244,7 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
     <div class="mob-tabs">
       <button class="mtab on" data-sub="dash">📊</button>
       <button class="mtab" data-sub="grp">👑</button>
+      <button class="mtab" data-sub="sub">🔑</button>
       <button class="mtab" data-sub="jobs">📋</button>
       <button class="mtab" data-sub="ent">📩</button>
       <button class="mtab" data-sub="dl">📥</button>
@@ -285,6 +287,44 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
       <!-- グループ一覧 -->
       <div class="shd">📋 管理ページ一覧</div>
       <div id="group-list"></div>
+    </div>
+
+    <!-- サブマスター管理 -->
+    <div class="sub" id="sub-sub">
+      <div class="shd">🔑 サブマスター管理</div>
+      <div class="card" style="border-top:3px solid var(--teal);margin-bottom:16px">
+        <div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:4px">➕ サブマスターを発行</div>
+        <div style="font-size:12px;color:var(--t3);margin-bottom:18px;line-height:1.7">
+          サブマスターは担当グループへの案件登録・配信・エントリー管理ができます。<br>
+          担当するグループを複数割り当てることができます。
+        </div>
+        <div class="fg" style="margin-bottom:0">
+          <div class="fgrp" style="margin-bottom:14px">
+            <label class="flbl">サブマスター名 <span style="color:var(--red)">*</span></label>
+            <input class="fi" id="sm-name" placeholder="例：担当者A／田中">
+          </div>
+          <div class="fgrp" style="margin-bottom:14px">
+            <label class="flbl">メールアドレス（ログインID）<span style="color:var(--red)">*</span></label>
+            <input class="fi" id="sm-email" type="email" placeholder="例：tanaka@humedia.com">
+          </div>
+          <div class="fg-full fgrp" style="margin-bottom:14px">
+            <label class="flbl">パスワード <span style="color:var(--red)">*</span></label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input class="fi" id="sm-pw" type="text" style="flex:1;font-family:monospace;letter-spacing:.08em;font-size:15px">
+              <button id="gen-sm-pw" type="button" style="padding:10px 14px;background:var(--g100);color:var(--g600);border:1.5px solid var(--g200);border-radius:var(--rs);font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap">再生成</button>
+            </div>
+          </div>
+          <div class="fg-full fgrp" style="margin-bottom:18px">
+            <label class="flbl">担当グループを選択（複数選択可）</label>
+            <div id="sm-group-check" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;padding:12px;background:var(--g50);border-radius:var(--rs);border:1px solid var(--g200);min-height:44px">
+              <div style="font-size:12px;color:var(--t3)">グループ管理でグループを作成するとここに表示されます</div>
+            </div>
+          </div>
+        </div>
+        <button id="create-sm" style="width:100%;padding:14px;background:var(--teal);color:var(--w);border:none;border-radius:var(--rs);font-size:15px;font-weight:800;cursor:pointer;letter-spacing:.02em">サブマスターを発行する</button>
+      </div>
+      <div class="shd">📋 サブマスター一覧</div>
+      <div id="sm-list"></div>
     </div>
 
     <!-- 案件管理 -->
@@ -484,7 +524,7 @@ var DEFAULT_JOBS = [
    状態
 ════════════════════════════════════════ */
 var currentUser = null;
-var jobs = [], entries = [], groups = [];
+var jobs = [], entries = [], groups = [], submasters = [];
 var curSub = 'dash', curView = 'list', dragId = null;
 
 /* ════════════════════════════════════════
@@ -505,14 +545,15 @@ function pullData(cb){
     .then(function(r){return r.json();})
     .then(function(res){
       if(res.ok){
-        jobs    = (res.data.jobs && res.data.jobs.length) ? res.data.jobs : DEFAULT_JOBS.slice();
-        entries = res.data.entries || [];
-        groups  = res.data.groups  || [];
+        jobs       = (res.data.jobs && res.data.jobs.length) ? res.data.jobs : DEFAULT_JOBS.slice();
+        entries    = res.data.entries    || [];
+        groups     = res.data.groups     || [];
+        submasters = res.data.submasters || [];
       }
       if(cb) cb(true);
     })
     .catch(function(){
-      jobs = DEFAULT_JOBS.slice(); entries = []; groups = [];
+      jobs = DEFAULT_JOBS.slice(); entries = []; groups = []; submasters = [];
       if(cb) cb(false);
     });
 }
@@ -613,7 +654,7 @@ function initAdmin(){
   checkApiNotice();
   // GASからデータ取得 → 各画面を描画
   pullData(function(){
-    updBadge(); updJSel(); renderDash(); renderAJ(); renderEnt(); renderGroups();
+    updBadge(); updJSel(); renderDash(); renderAJ(); renderEnt(); renderGroups(); renderSubmasters();
   });
   // 15秒ごとに最新データを取得
   setInterval(function(){
@@ -648,6 +689,7 @@ function showSub(s){
   if(s==='ent'){ pullData(function(){renderEnt();}); }
   if(s==='dash'){ pullData(function(){renderDash();}); }
   if(s==='grp'){ pullData(function(){renderGroups();}); }
+  if(s==='sub'){ pullData(function(){renderSubmasters();}); }
   if(s==='dl')updJSel();
   if(s==='cfg')checkApiNotice();
 }
@@ -981,6 +1023,134 @@ function fbCopy(text){
   document.body.appendChild(ta);ta.select();
   try{document.execCommand('copy');showToast('📋 コピーしました');}catch(e){showToast('⚠️ コピーできませんでした');}
   document.body.removeChild(ta);
+}
+
+/* ════════════════════════════════════════
+   サブマスター管理
+════════════════════════════════════════ */
+function pushSubmasters(cb){
+  if(!gasConfigured()){ if(cb)cb(false); return; }
+  fetch(GAS_URL, {method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({action:'saveSubmasters', submasters:submasters})})
+    .then(function(r){return r.json();}).then(function(res){if(cb)cb(res&&res.ok);})
+    .catch(function(){if(cb)cb(false);});
+}
+
+document.getElementById('gen-sm-pw').addEventListener('click', function(){
+  document.getElementById('sm-pw').value = genPw();
+});
+
+document.getElementById('create-sm').addEventListener('click', function(){
+  var name  = (document.getElementById('sm-name').value||'').trim();
+  var email = (document.getElementById('sm-email').value||'').trim();
+  var pw    = (document.getElementById('sm-pw').value||'').trim();
+  if(!name){showToast('⚠️ サブマスター名は必須です');return;}
+  if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){showToast('⚠️ 正しいメールアドレスを入力してください');return;}
+  if(!pw){showToast('⚠️ パスワードを入力または再生成してください');return;}
+
+  // 重複チェック（グループアカウントとも）
+  var allEmails = submasters.map(function(s){return (s.email||'').toLowerCase();})
+    .concat(groups.map(function(g){return (g.adminEmail||'').toLowerCase();}));
+  if(allEmails.indexOf(email.toLowerCase())!==-1){
+    showToast('⚠️ このメールアドレスは既に使われています');return;
+  }
+
+  // 担当グループIDを取得（チェックボックスから）
+  var checkedGroupIds = [];
+  document.querySelectorAll('#sm-group-check input[type=checkbox]:checked').forEach(function(cb){
+    checkedGroupIds.push(cb.value);
+  });
+
+  var sm = {
+    id: 'sm'+Date.now(),
+    name: name, email: email, password: pw,
+    groupIds: checkedGroupIds,
+    createdAt: new Date().toISOString()
+  };
+  submasters.push(sm);
+  document.getElementById('sm-name').value='';
+  document.getElementById('sm-email').value='';
+  document.getElementById('sm-pw').value = genPw();
+  document.querySelectorAll('#sm-group-check input[type=checkbox]').forEach(function(cb){cb.checked=false;});
+  renderSubmasters();
+  pushSubmasters(function(ok){ showToast(ok?'✅ サブマスターを発行しました':'⚠️ サーバー保存に失敗しました'); });
+});
+
+function renderSubmasters(){
+  // グループチェックボックスを最新状態に更新
+  var checkEl = document.getElementById('sm-group-check');
+  if(checkEl){
+    if(!groups.length){
+      checkEl.innerHTML = '<div style="font-size:12px;color:var(--t3)">グループ管理でグループを作成するとここに表示されます</div>';
+    }else{
+      checkEl.innerHTML = groups.map(function(g){
+        return '<label style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:var(--w);border:1.5px solid var(--g200);border-radius:var(--rs);cursor:pointer;font-size:13px;font-weight:600">'
+          +'<input type="checkbox" value="'+esc(g.id)+'" style="width:16px;height:16px;accent-color:var(--teal);cursor:pointer"> '+esc(g.name)
+          +'</label>';
+      }).join('');
+    }
+  }
+
+  var el = document.getElementById('sm-list'); if(!el) return;
+  if(!submasters.length){
+    el.innerHTML = '<div class="empty"><div class="empty-ic">🔑</div><div class="empty-t">サブマスターがまだいません</div><div style="font-size:13px;margin-top:6px;color:var(--t3)">上のフォームから発行してください</div></div>';
+    return;
+  }
+  var baseUrl = location.href.replace(/[^\/]*$/,'');
+  var html = '';
+  submasters.forEach(function(sm){
+    var myGroups = groups.filter(function(g){ return (sm.groupIds||[]).indexOf(g.id)!==-1; });
+    html +=
+      '<div style="background:var(--w);border-radius:var(--rs);border:1px solid var(--g200);border-left:4px solid var(--teal);padding:16px;margin-bottom:12px;box-shadow:var(--sh)">'
+        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">'
+          +'<div><div style="font-size:15px;font-weight:800;color:var(--tx)">🔑 '+esc(sm.name)+'</div>'
+            +'<div style="font-size:11px;color:var(--t3);margin-top:2px">作成：'+fmtD(sm.createdAt)+'</div></div>'
+          +'<button data-del-sm="'+esc(sm.id)+'" style="background:var(--rlt);color:var(--red);border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">削除</button>'
+        +'</div>'
+        +'<div style="background:var(--g50);border-radius:var(--rs);padding:10px 12px;font-size:12px;margin-bottom:10px;border:1px solid var(--g200)">'
+          +'<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--t3);font-weight:700">ログインID</span><span style="font-family:monospace">'+esc(sm.email)+'</span></div>'
+          +'<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--t3);font-weight:700">パスワード</span><span style="font-family:monospace">'+esc(sm.password)+'</span></div>'
+          +'<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--t3);font-weight:700">ログインURL</span><span style="word-break:break-all;text-align:right">'+esc(baseUrl+'casting-submaster.html')+'</span></div>'
+        +'</div>'
+        +'<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:700;color:var(--t2);margin-bottom:6px">担当グループ（'+myGroups.length+'件）</div>'
+          +(myGroups.length ? myGroups.map(function(g){
+            return '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--teal);color:#fff;border-radius:5px;font-size:12px;font-weight:700;margin:2px">'+esc(g.name)+'</span>';
+          }).join('') : '<span style="font-size:12px;color:var(--t3)">担当グループなし</span>')
+        +'</div>'
+        +'<button data-copy-sm="'+esc(sm.id)+'" style="background:var(--glt);color:var(--green);border:none;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer">📋 案内文をコピー</button>'
+      +'</div>';
+  });
+  el.innerHTML = html;
+  el.querySelectorAll('[data-del-sm]').forEach(function(b){
+    b.addEventListener('click',function(){delSubmaster(this.dataset.delSm);});
+  });
+  el.querySelectorAll('[data-copy-sm]').forEach(function(b){
+    b.addEventListener('click',function(){copySmGuide(this.dataset.copySm);});
+  });
+}
+
+function delSubmaster(id){
+  var sm=submasters.find(function(x){return x.id===id;});
+  if(!sm)return;
+  if(!confirm('サブマスター「'+sm.name+'」を削除しますか？\nログインできなくなります。'))return;
+  submasters=submasters.filter(function(x){return x.id!==id;});
+  renderSubmasters();
+  pushSubmasters(function(ok){ showToast(ok?'🗑️ サブマスターを削除しました':'⚠️ サーバー保存に失敗しました'); });
+}
+
+function copySmGuide(id){
+  var sm=submasters.find(function(x){return x.id===id;});
+  if(!sm)return;
+  var baseUrl=location.href.replace(/[^\/]*$/,'');
+  var myGroups=groups.filter(function(g){return (sm.groupIds||[]).indexOf(g.id)!==-1;});
+  var text='【サブマスターログイン情報】\n\n'
+    +'■ ログインURL\n'+baseUrl+'casting-submaster.html\n\n'
+    +'■ ログインID\n'+sm.email+'\n\n'
+    +'■ パスワード\n'+sm.password+'\n\n'
+    +'■ 担当グループ\n'+(myGroups.length?myGroups.map(function(g){return '・'+g.name;}).join('\n'):'担当グループなし');
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){showToast('📋 案内文をコピーしました');},function(){fbCopy(text);});
+  }else{fbCopy(text);}
 }
 
 /* ════════════════════════════════════════
