@@ -234,6 +234,7 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
     <button class="sb-btn on" data-sub="dash"><span class="sb-ic">📊</span>ダッシュボード</button>
     <button class="sb-btn" data-sub="grp"><span class="sb-ic">👑</span>グループ管理</button>
     <button class="sb-btn" data-sub="sub"><span class="sb-ic">🔑</span>サブマスター管理</button>
+    <button class="sb-btn" data-sub="ch"><span class="sb-ic">📡</span>チャンネル管理</button>
     <button class="sb-btn" data-sub="jobs"><span class="sb-ic">📋</span>案件管理</button>
     <button class="sb-btn" data-sub="ent" style="position:relative"><span class="sb-ic">📩</span>エントリー管理<span class="sb-dot" id="sb-dot">0</span></button>
     <button class="sb-btn" data-sub="dl"><span class="sb-ic">📥</span>ダウンロード</button>
@@ -245,6 +246,7 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
       <button class="mtab on" data-sub="dash">📊</button>
       <button class="mtab" data-sub="grp">👑</button>
       <button class="mtab" data-sub="sub">🔑</button>
+      <button class="mtab" data-sub="ch">📡</button>
       <button class="mtab" data-sub="jobs">📋</button>
       <button class="mtab" data-sub="ent">📩</button>
       <button class="mtab" data-sub="dl">📥</button>
@@ -325,6 +327,27 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
       </div>
       <div class="shd">📋 サブマスター一覧</div>
       <div id="sm-list"></div>
+    </div>
+
+    <!-- チャンネル管理 -->
+    <div class="sub" id="sub-ch">
+      <div class="shd">📡 チャンネル（公開ページ）管理</div>
+      <div class="card" style="border-top:3px solid var(--teal);margin-bottom:16px">
+        <div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:4px">➕ 新しいチャンネルを作成</div>
+        <div style="font-size:12px;color:var(--t3);margin-bottom:18px;line-height:1.7">
+          チャンネル＝キャストに見せる公開ページの単位です。<br>
+          サブマスターが案件をチャンネルに配信することで、金額・条件を変えて公開できます。
+        </div>
+        <div class="fg" style="margin-bottom:14px">
+          <div class="fgrp"><label class="flbl">チャンネル名 <span style="color:var(--red)">*</span></label>
+            <input class="fi" id="ch-name" placeholder="例：女優向け案件ページ／モデル向け"></div>
+          <div class="fg-full fgrp"><label class="flbl">説明（任意）</label>
+            <input class="fi" id="ch-desc" placeholder="例：ドラマ・CM出演希望の方向け"></div>
+        </div>
+        <button id="create-ch" style="width:100%;padding:14px;background:var(--teal);color:var(--w);border:none;border-radius:var(--rs);font-size:15px;font-weight:800;cursor:pointer">チャンネルを作成する</button>
+      </div>
+      <div class="shd">📋 チャンネル一覧</div>
+      <div id="ch-list"></div>
     </div>
 
     <!-- 案件管理 -->
@@ -524,7 +547,7 @@ var DEFAULT_JOBS = [
    状態
 ════════════════════════════════════════ */
 var currentUser = null;
-var jobs = [], entries = [], groups = [], submasters = [];
+var jobs = [], entries = [], groups = [], submasters = [], channels = [], channelJobs = [];
 var curSub = 'dash', curView = 'list', dragId = null;
 
 /* ════════════════════════════════════════
@@ -549,11 +572,13 @@ function pullData(cb){
         entries    = res.data.entries    || [];
         groups     = res.data.groups     || [];
         submasters = res.data.submasters || [];
+        channels   = res.data.channels   || [];
+        channelJobs= res.data.channel_jobs|| [];
       }
       if(cb) cb(true);
     })
     .catch(function(){
-      jobs = DEFAULT_JOBS.slice(); entries = []; groups = []; submasters = [];
+      jobs = DEFAULT_JOBS.slice(); entries = []; groups = []; submasters = []; channels = []; channelJobs = [];
       if(cb) cb(false);
     });
 }
@@ -654,7 +679,7 @@ function initAdmin(){
   checkApiNotice();
   // GASからデータ取得 → 各画面を描画
   pullData(function(){
-    updBadge(); updJSel(); renderDash(); renderAJ(); renderEnt(); renderGroups(); renderSubmasters();
+    updBadge(); updJSel(); renderDash(); renderAJ(); renderEnt(); renderGroups(); renderSubmasters(); renderChannels();
   });
   // 15秒ごとに最新データを取得
   setInterval(function(){
@@ -690,6 +715,7 @@ function showSub(s){
   if(s==='dash'){ pullData(function(){renderDash();}); }
   if(s==='grp'){ pullData(function(){renderGroups();}); }
   if(s==='sub'){ pullData(function(){renderSubmasters();}); }
+  if(s==='ch'){ pullData(function(){renderChannels();}); }
   if(s==='dl')updJSel();
   if(s==='cfg')checkApiNotice();
 }
@@ -1154,8 +1180,89 @@ function copySmGuide(id){
 }
 
 /* ════════════════════════════════════════
-   AI解析
+   チャンネル管理
 ════════════════════════════════════════ */
+function pushChannels(cb){
+  if(!gasConfigured()){ if(cb)cb(false); return; }
+  fetch(GAS_URL, {method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({action:'saveChannels', channels:channels})})
+    .then(function(r){return r.json();}).then(function(res){if(cb)cb(res&&res.ok);})
+    .catch(function(){if(cb)cb(false);});
+}
+
+document.getElementById('create-ch').addEventListener('click', function(){
+  var name=(document.getElementById('ch-name').value||'').trim();
+  var desc=(document.getElementById('ch-desc').value||'').trim();
+  if(!name){showToast('⚠️ チャンネル名は必須です');return;}
+  var ch={id:'ch'+Date.now(),name:name,description:desc,createdAt:new Date().toISOString()};
+  channels.push(ch);
+  document.getElementById('ch-name').value='';
+  document.getElementById('ch-desc').value='';
+  renderChannels();
+  pushChannels(function(ok){ showToast(ok?'✅ チャンネルを作成しました':'⚠️ サーバー保存に失敗しました'); });
+});
+
+function renderChannels(){
+  var el=document.getElementById('ch-list'); if(!el) return;
+  if(!channels.length){
+    el.innerHTML='<div class="empty"><div class="empty-ic">📡</div><div class="empty-t">チャンネルがまだありません</div><div style="font-size:13px;margin-top:6px;color:var(--t3)">上のフォームから作成してください</div></div>';
+    return;
+  }
+  var baseUrl=location.href.replace(/[^\/]*$/,'');
+  var html='';
+  channels.forEach(function(ch){
+    var cjCount=channelJobs.filter(function(cj){return cj.channelId===ch.id;}).length;
+    var pubUrl=baseUrl+'public.html?ch='+ch.id;
+    html+=
+      '<div style="background:var(--w);border-radius:var(--rs);border:1px solid var(--g200);border-left:4px solid var(--teal);padding:16px;margin-bottom:12px;box-shadow:var(--sh)">'
+        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">'
+          +'<div><div style="font-size:15px;font-weight:800;color:var(--tx)">📡 '+esc(ch.name)+'</div>'
+            +(ch.description?'<div style="font-size:12px;color:var(--t3);margin-top:2px">'+esc(ch.description)+'</div>':'')
+            +'<div style="font-size:11px;color:var(--t3);margin-top:2px">作成：'+fmtD(ch.createdAt)+'</div>'
+          +'</div>'
+          +'<button data-del-ch="'+esc(ch.id)+'" style="background:var(--rlt);color:var(--red);border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">削除</button>'
+        +'</div>'
+        +'<div style="background:var(--g50);border-radius:var(--rs);padding:10px 12px;font-size:12px;margin-bottom:10px;border:1px solid var(--g200)">'
+          +'<div style="display:flex;justify-content:space-between;padding:3px 0">'
+            +'<span style="color:var(--t3);font-weight:700">公開ページURL</span>'
+            +'<span style="word-break:break-all;text-align:right;color:var(--blue)">'+esc(pubUrl)+'</span>'
+          +'</div>'
+          +'<div style="display:flex;justify-content:space-between;padding:3px 0">'
+            +'<span style="color:var(--t3);font-weight:700">配信中の案件</span>'
+            +'<span style="font-weight:800;color:var(--teal)">'+cjCount+'件</span>'
+          +'</div>'
+        +'</div>'
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+          +'<button data-copy-ch="'+esc(ch.id)+'" style="background:var(--glt);color:var(--green);border:none;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer">📋 URLをコピー</button>'
+          +'<a href="'+esc(pubUrl)+'" target="_blank" rel="noopener" style="background:var(--blt);color:var(--blue);border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;display:inline-block">公開ページを見る</a>'
+        +'</div>'
+      +'</div>';
+  });
+  el.innerHTML=html;
+  el.querySelectorAll('[data-del-ch]').forEach(function(b){
+    b.addEventListener('click',function(){delChannel(this.dataset.delCh);});
+  });
+  el.querySelectorAll('[data-copy-ch]').forEach(function(b){
+    b.addEventListener('click',function(){
+      var ch=channels.find(function(x){return x.id===this.dataset.copyCh;}.bind(this));
+      if(!ch)return;
+      var url=location.href.replace(/[^\/]*$/,'')+'public.html?ch='+ch.id;
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(url).then(function(){showToast('📋 URLをコピーしました');},function(){fbCopy(url);});
+      }else{fbCopy(url);}
+    });
+  });
+}
+
+function delChannel(id){
+  var ch=channels.find(function(x){return x.id===id;});
+  if(!ch)return;
+  var cjCount=channelJobs.filter(function(cj){return cj.channelId===id;}).length;
+  if(!confirm('チャンネル「'+ch.name+'」を削除しますか？\n配信中の案件('+cjCount+'件)も取り下げられます。\nキャストにはこのURLの案件が表示されなくなります。'))return;
+  channels=channels.filter(function(x){return x.id!==id;});
+  renderChannels();
+  pushChannels(function(ok){ showToast(ok?'🗑️ チャンネルを削除しました':'⚠️ サーバー保存に失敗しました'); });
+}
 function setAI(barId,spId,msgId,cls,msg){
   var bar=document.getElementById(barId);if(!bar)return;
   bar.className='ai-bar '+cls;
