@@ -407,14 +407,14 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
 /* ════════════════════════════════════════
    定数
 ════════════════════════════════════════ */
-/* ⚙️ GASのウェブアプリURL（公開ページと同じURLを貼り付け） */
 var GAS_URL = 'https://script.google.com/macros/s/AKfycbx1RtttrO7t_qvOpzf-QU9sGjrLuTpSr1Y6kTySIwZeJwAgeOu5KJb7UExsPFslA6ARDw/exec';
 
 var SESSION_KEY = 'casting_admin_session';
 var APIKEY_KEY  = 'casting_api_key';
 
-var ADMIN_ACCOUNTS = [
-  {email:'humediajapan.1234@gmail.com', password:'hmj1114', name:'管理者'}
+/* マスターアカウント（全データにアクセス可能） */
+var MASTER_ACCOUNTS = [
+  {email:'humediajapan.1234@gmail.com', password:'hmj1114', name:'マスター管理者', isMaster:true, groupId:null}
 ];
 
 var SC = {
@@ -433,35 +433,38 @@ var DEFAULT_JOBS = [
 /* ════════════════════════════════════════
    状態
 ════════════════════════════════════════ */
-var currentUser = null;
+var currentUser  = null;  // ログイン中のユーザー情報
+var currentGroupId = null; // ログイン中のグループID（マスターはnull）
 var jobs = [], entries = [];
 var curSub = 'dash', curView = 'list', dragId = null;
 
 /* ════════════════════════════════════════
-   データ層（GAS連携）
-   jobs / entries はグローバル変数で保持。
-   GASから取得し、変更時はGASへ全件保存する。
+   データ層（GAS連携・グループ対応）
 ════════════════════════════════════════ */
 function gasConfigured(){ return GAS_URL && GAS_URL.indexOf('http') === 0; }
+function isMaster(){ return currentUser && currentUser.isMaster; }
 
-/* GASから全データ取得 → グローバル変数へ。完了後コールバック */
+/* GASからデータ取得
+   マスター → 全データ（?type=all）
+   グループ担当 → 自グループのみ（?type=all&group=グループID）*/
 function pullData(cb){
   if(!gasConfigured()){
     jobs = DEFAULT_JOBS.slice(); entries = [];
     if(cb) cb(false);
     return;
   }
-  fetch(GAS_URL + '?type=all')
+  var url = GAS_URL + '?type=all' + (currentGroupId ? '&group='+encodeURIComponent(currentGroupId) : '');
+  fetch(url)
     .then(function(r){return r.json();})
     .then(function(res){
       if(res.ok){
-        jobs    = (res.data.jobs && res.data.jobs.length) ? res.data.jobs : DEFAULT_JOBS.slice();
+        jobs    = (res.data.jobs && res.data.jobs.length) ? res.data.jobs : (currentGroupId ? [] : DEFAULT_JOBS.slice());
         entries = res.data.entries || [];
       }
       if(cb) cb(true);
     })
     .catch(function(){
-      jobs = DEFAULT_JOBS.slice(); entries = [];
+      jobs = currentGroupId ? [] : DEFAULT_JOBS.slice(); entries = [];
       if(cb) cb(false);
     });
 }
@@ -508,9 +511,18 @@ function tryAutoLogin(){
   try{
     var s=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');
     if(!s)return false;
-    var u=ADMIN_ACCOUNTS.find(function(x){return x.email===s.email&&x.password===s.password;});
-    if(!u){localStorage.removeItem(SESSION_KEY);return false;}
-    currentUser=u; showApp(u); return true;
+    // まずマスターアカウントで確認
+    var u=MASTER_ACCOUNTS.find(function(x){return x.email===s.email&&x.password===s.password;});
+    if(u){ currentUser=u; currentGroupId=null; showApp(u); return true; }
+    // グループアカウントはGASから取得した後に確認が必要なので、
+    // sessionにgroupIdが保存されていればそのまま復元
+    if(s.groupId && s.groupName){
+      currentUser={email:s.email, password:s.password, name:s.groupName, isMaster:false, groupId:s.groupId};
+      currentGroupId=s.groupId;
+      showApp(currentUser);
+      return true;
+    }
+    localStorage.removeItem(SESSION_KEY);return false;
   }catch(e){return false;}
 }
 
@@ -521,26 +533,58 @@ document.getElementById('l-em').addEventListener('keydown', function(e){if(e.key
 function doLogin(){
   var em=(document.getElementById('l-em').value||'').trim();
   var pw=(document.getElementById('l-pw').value||'').trim();
-  var u=ADMIN_ACCOUNTS.find(function(x){return x.email===em&&x.password===pw;});
   var err=document.getElementById('l-err');
-  if(u){
-    currentUser=u;
+  err.style.display='none';
+
+  // まずマスターアカウントで確認
+  var master=MASTER_ACCOUNTS.find(function(x){return x.email===em&&x.password===pw;});
+  if(master){
+    currentUser=master; currentGroupId=null;
     if(document.getElementById('l-rem').checked){
-      try{localStorage.setItem(SESSION_KEY,JSON.stringify({email:em,password:pw}));}catch(e){}
-    }else{
-      try{localStorage.removeItem(SESSION_KEY);}catch(e){}
-    }
-    err.style.display='none';
-    showApp(u);
-  }else{
-    err.style.display='block';
+      try{localStorage.setItem(SESSION_KEY,JSON.stringify({email:em,password:pw,groupId:null}));}catch(e){}
+    }else{ try{localStorage.removeItem(SESSION_KEY);}catch(e){} }
+    showApp(master); return;
   }
+
+  // マスターでなければGASのgroupsシートで確認
+  if(!gasConfigured()){ err.style.display='block'; return; }
+  document.getElementById('login-btn').textContent='確認中...';
+  document.getElementById('login-btn').disabled=true;
+  fetch(GAS_URL+'?type=groups')
+    .then(function(r){return r.json();})
+    .then(function(res){
+      document.getElementById('login-btn').textContent='ログイン →';
+      document.getElementById('login-btn').disabled=false;
+      var groups=res.ok?(res.data.groups||[]):[];
+      var g=groups.find(function(x){
+        return x.adminEmail&&x.adminPassword&&
+               x.adminEmail.toLowerCase()===em.toLowerCase()&&
+               x.adminPassword===pw;
+      });
+      if(g){
+        currentUser={email:em, password:pw, name:g.name, isMaster:false, groupId:g.id};
+        currentGroupId=g.id;
+        if(document.getElementById('l-rem').checked){
+          try{localStorage.setItem(SESSION_KEY,JSON.stringify({email:em,password:pw,groupId:g.id,groupName:g.name}));}catch(e){}
+        }else{ try{localStorage.removeItem(SESSION_KEY);}catch(e){} }
+        showApp(currentUser);
+      }else{
+        err.style.display='block';
+      }
+    })
+    .catch(function(){
+      document.getElementById('login-btn').textContent='ログイン →';
+      document.getElementById('login-btn').disabled=false;
+      err.style.display='block';
+    });
 }
 
 function showApp(u){
   document.getElementById('login-page').style.display='none';
   document.getElementById('app').style.display='block';
-  document.getElementById('hdr-un').textContent='👤 '+u.name;
+  // グループ担当の場合はグループ名を表示、マスターは名前のみ
+  var label = u.isMaster ? ('👑 '+u.name) : ('👤 '+u.name+(currentGroupId?' ['+u.name+']':''));
+  document.getElementById('hdr-un').textContent = u.isMaster ? '👑 '+u.name : '👤 '+u.name;
   initAdmin();
 }
 
@@ -785,6 +829,8 @@ document.getElementById('add-job-btn').addEventListener('click', function(){
     // ── 新規登録モード ──
     data.id = 'j'+Date.now();
     data.createdAt = new Date().toISOString();
+    // グループ担当者の場合は自グループのIDを付与
+    if(currentGroupId) data.groupId = currentGroupId;
     jobs.unshift(data);
     clearJobForm();
     renderAJ();updJSel();
@@ -952,6 +998,12 @@ function renderEnt(){
   var html='';
   fl.forEach(function(e){
     var j=jobs.find(function(x){return x.id===e.jobId;});
+    /* この人の全応募を集計してバッジ表示 */
+    var byEmail = e.email ? entries.filter(function(x){return x.email&&x.email.toLowerCase()===e.email.toLowerCase();}) : [];
+    var eTot    = byEmail.length;
+    var ePassed = byEmail.filter(function(x){return x.status==='passed';}).length;
+    var eRate   = eTot>0 ? Math.round(ePassed/eTot*100) : 0;
+    var rateCol = eRate>=50?'var(--green)':eRate>=20?'var(--amber)':'var(--t3)';
     html+=
       '<div class="ei" data-eid="'+esc(e.id)+'">'
       +'<div style="min-width:0;flex:1">'
@@ -963,6 +1015,9 @@ function renderEnt(){
           +(e.ig_followers?'<span>📸 '+fmtN(e.ig_followers)+'人</span>':'')
           +(e.height?'<span>📏 '+esc(e.height)+'cm</span>':'')
           +((e.attachments||[]).length?'<span>📎 '+e.attachments.length+'件</span>':'')
+          +(eTot>0?'<span style="background:var(--blt);color:var(--blue);padding:2px 8px;border-radius:5px;font-size:11px">応募'+eTot+'回</span>':'')
+          +(ePassed>0?'<span style="background:var(--glt);color:var(--green);padding:2px 8px;border-radius:5px;font-size:11px">採用'+ePassed+'回</span>':'')
+          +(eTot>0?'<span style="color:'+rateCol+';font-size:11px">採用率'+eRate+'%</span>':'')
         +'</div>'
       +'</div>'
       +'<div style="flex-shrink:0;text-align:right">'+sbBadge(e.status)+'<div style="font-size:11px;color:var(--blue);margin-top:5px;font-weight:700">詳細 →</div></div>'
@@ -1037,6 +1092,18 @@ function openDov(eid){
   var extra=e.extra||{},atts=e.attachments||[];
   var hasSNS=e.tt_followers||e.ig_followers||e.tt_avg10||e.ig_reach10;
 
+  /* ── この人の全応募履歴を集計 ── */
+  var allByEmail = entries.filter(function(x){
+    return x.email && e.email && x.email.toLowerCase()===e.email.toLowerCase();
+  });
+  var statTotal    = allByEmail.length;
+  var statPassed   = allByEmail.filter(function(x){return x.status==='passed';}).length;
+  var statRejected = allByEmail.filter(function(x){return x.status==='rejected';}).length;
+  var statPending  = allByEmail.filter(function(x){return x.status==='pending'||x.status==='reviewing';}).length;
+  var statRate     = statTotal>0 ? Math.round(statPassed/statTotal*100) : 0;
+  /* 応募履歴（新しい順、最大10件）*/
+  var history = [].concat(allByEmail).sort(function(a,b){return new Date(b.submittedAt)-new Date(a.submittedAt);}).slice(0,10);
+
   function maskEmail(m){if(!m)return'—';var p=m.split('@');return (p[0].length<=2?p[0]:p[0].slice(0,2)+'****')+'@'+p[1];}
 
   var html=
@@ -1052,6 +1119,43 @@ function openDov(eid){
       +'<div><div style="font-size:12px;font-weight:800;color:var(--green);margin-bottom:2px">📧 確認メールを送る</div>'
         +'<div style="font-size:11px;color:var(--g500)">送信先：'+maskEmail(e.email)+'</div></div>'
       +'<button class="mail-btn" data-eid="'+esc(eid)+'" style="background:var(--green);color:#fff;border:none;border-radius:var(--rs);padding:9px 18px;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;font-family:inherit">メーラーを開く →</button>'
+    +'</div>';
+
+  /* ── 実績サマリー ── */
+  html+=
+    '<div class="ins-box" style="border:1.5px solid var(--bmd);background:var(--blt)">'
+      +'<div class="ins-t">📊 この応募者の実績サマリー</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">'
+        +'<div style="background:var(--w);border-radius:7px;padding:10px 8px;text-align:center;border:1px solid var(--g200)">'
+          +'<div style="font-size:22px;font-weight:800;color:var(--blue)">'+statTotal+'</div>'
+          +'<div style="font-size:10px;font-weight:700;color:var(--t3);margin-top:2px">総応募数</div></div>'
+        +'<div style="background:var(--w);border-radius:7px;padding:10px 8px;text-align:center;border:1px solid var(--g200)">'
+          +'<div style="font-size:22px;font-weight:800;color:var(--green)">'+statPassed+'</div>'
+          +'<div style="font-size:10px;font-weight:700;color:var(--t3);margin-top:2px">採用数</div></div>'
+        +'<div style="background:var(--w);border-radius:7px;padding:10px 8px;text-align:center;border:1px solid var(--g200)">'
+          +'<div style="font-size:22px;font-weight:800;color:var(--amber)">'+statPending+'</div>'
+          +'<div style="font-size:10px;font-weight:700;color:var(--t3);margin-top:2px">選考中</div></div>'
+        +'<div style="background:var(--w);border-radius:7px;padding:10px 8px;text-align:center;border:1px solid var(--g200)">'
+          +'<div style="font-size:22px;font-weight:800;color:'+(statRate>=50?'var(--green)':statRate>=20?'var(--amber)':'var(--t3)')+'">'+statRate+'%</div>'
+          +'<div style="font-size:10px;font-weight:700;color:var(--t3);margin-top:2px">採用率</div></div>'
+      +'</div>'
+      +'<div style="font-size:12px;font-weight:800;color:var(--t2);margin-bottom:8px">📋 応募履歴（直近'+history.length+'件）</div>'
+      +history.map(function(h){
+        var hj=jobs.find(function(x){return x.id===h.jobId;});
+        var isCurrent=(h.id===eid);
+        return '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;margin-bottom:4px;'
+          +(isCurrent?'background:var(--blt);border:1.5px solid var(--bmd)':'background:var(--w);border:1px solid var(--g200)')
+          +'">'
+          +'<div style="flex:1;min-width:0">'
+            +'<div style="font-size:12px;font-weight:700;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+              +(isCurrent?'<span style="background:var(--blue);color:#fff;font-size:10px;padding:1px 6px;border-radius:4px;margin-right:5px;font-weight:800">今回</span>':'')
+              +esc((hj?hj.title:'不明案件').slice(0,28))+(hj&&hj.title.length>28?'…':'')
+            +'</div>'
+            +'<div style="font-size:11px;color:var(--t3);margin-top:2px">'+fmtD(h.submittedAt)+'</div>'
+          +'</div>'
+          +sbBadge(h.status)
+          +'</div>';
+      }).join('')
     +'</div>';
 
   if(e.dob||e.height){
