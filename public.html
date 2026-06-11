@@ -187,28 +187,43 @@ var SAMPLE = [
 
 var SC = {pending:{lb:'確認待ち',col:'#B45309',bg:'#FEF7E0'},reviewing:{lb:'選考中',col:'#1D4ED8',bg:'#EFF6FF'},passed:{lb:'採用',col:'#059669',bg:'#ECFDF5'},rejected:{lb:'見送り',col:'#6B7280',bg:'#F9FAFB'}};
 
-/* ── GASからデータ取得（クラウド） ── */
+/* ── URLからグループIDを取得（?g=グループID） ── */
+function getGroupId(){
+  try{
+    var params = new URLSearchParams(location.search);
+    return params.get('g') || null;
+  }catch(e){ return null; }
+}
+var currentGroupId = getGroupId();
+
+/* ── GASからデータ取得（グループ絞り込み対応） ── */
 function gasConfigured(){ return GAS_URL && GAS_URL.indexOf('http') === 0; }
 
 function fetchData(){
-  return fetch(GAS_URL + '?type=all')
+  var url = GAS_URL + '?type=all' + (currentGroupId ? '&group='+encodeURIComponent(currentGroupId) : '');
+  return fetch(url)
     .then(function(r){return r.json();})
     .then(function(res){
       if(res.ok){
-        jobs    = (res.data.jobs && res.data.jobs.length) ? res.data.jobs : SAMPLE;
+        // グループIDが指定されている場合はそのグループの案件のみ
+        var allJobs = res.data.jobs || [];
+        jobs = currentGroupId
+          ? allJobs.filter(function(j){ return j.groupId === currentGroupId; })
+          : (allJobs.length ? allJobs : SAMPLE);
         entries = res.data.entries || [];
       }
       return true;
     })
     .catch(function(){
-      // 通信失敗時はサンプルを表示
-      jobs = SAMPLE; entries = [];
+      jobs = currentGroupId ? [] : SAMPLE; entries = [];
       return false;
     });
 }
 
-/* ── GASへエントリー1件を送信 ── */
+/* ── GASへエントリー1件を送信（groupIdを付与） ── */
 function postEntry(entry){
+  // エントリーにもグループIDを付与して紐づけを明確にする
+  if(currentGroupId) entry.groupId = currentGroupId;
   return fetch(GAS_URL, {
     method:'POST',
     headers:{'Content-Type':'text/plain;charset=utf-8'},
