@@ -812,10 +812,102 @@ function renderSmGroups(){
   el.querySelectorAll('[data-sm-del-jid]').forEach(function(b){b.addEventListener('click',function(){delSmJobFromGroup(this.dataset.smDelJid);});});
   el.querySelectorAll('[data-sm-edit-jid]').forEach(function(b){b.addEventListener('click',function(){editSmJobInGroup(this.dataset.smEditJid);});});
   el.querySelectorAll('[data-sm-save-job]').forEach(function(b){b.addEventListener('click',function(){saveSmJobInGroup(this.dataset.smSaveJob);});});
+
+  // タブ切り替え
+  el.querySelectorAll('.sm-itab').forEach(function(tab){
+    tab.addEventListener('click',function(){
+      var gid=this.dataset.gid;
+      var type=this.dataset.smit;
+      var form=this.closest('.gcard').querySelector('[data-sm-save-job]').parentElement;
+      // タブのonクラス
+      this.closest('.itabs').querySelectorAll('.sm-itab').forEach(function(t){t.classList.remove('on');});
+      this.classList.add('on');
+      // パネルの表示切替
+      form.querySelectorAll('.sm-it-pdf,.sm-it-text,.sm-it-manual').forEach(function(p){p.style.display='none';});
+      var target=form.querySelector('.sm-it-'+type);
+      if(target) target.style.display='block';
+    });
+  });
+
+  // PDF解析
+  el.querySelectorAll('.sm-pdf-input').forEach(function(inp){
+    inp.addEventListener('change',function(){
+      var file=this.files[0]; if(!file)return;
+      var card=this.closest('.gcard');
+      var aiBar=card.querySelector('.sm-ai-pdf');
+      smSetAI(aiBar,'ai-l','"'+file.name+'" を解析中...');
+      var reader=new FileReader();
+      reader.onload=async function(){
+        try{
+          var b64=reader.result.split(',')[1];
+          var raw=await callAI([{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},{type:'text',text:buildPrompt('（添付PDFを解析してください）')}]);
+          var p=extractJSON(raw);if(!p)throw new Error('JSONの取り出しに失敗しました');
+          smFillForm(card,p);
+          // 手動入力タブに切り替え
+          card.querySelectorAll('.sm-itab').forEach(function(t){t.classList.toggle('on',t.dataset.smit==='manual');});
+          card.querySelectorAll('.sm-it-pdf,.sm-it-text,.sm-it-manual').forEach(function(pn){pn.style.display='none';});
+          var m=card.querySelector('.sm-it-manual');if(m)m.style.display='block';
+          smSetAI(aiBar,'ai-ok','✅ 解析完了！内容を確認して「追加」を押してください');
+        }catch(e){smSetAI(aiBar,'ai-err','❌ '+e.message);}
+      };
+      reader.onerror=function(){smSetAI(aiBar,'ai-err','❌ ファイルの読み込みに失敗しました');};
+      reader.readAsDataURL(file);
+      this.value='';
+    });
+  });
+
+  // テキスト解析
+  el.querySelectorAll('.sm-parse-btn').forEach(function(btn){
+    btn.addEventListener('click',async function(){
+      var card=this.closest('.gcard');
+      var txt=(card.querySelector('.sm-paste-area').value||'').trim();
+      if(!txt){showToast('テキストを貼り付けてください');return;}
+      var aiBar=card.querySelector('.sm-ai-text');
+      smSetAI(aiBar,'ai-l','テキストを解析中...');
+      try{
+        var raw=await callAI([{type:'text',text:buildPrompt(txt)}]);
+        var p=extractJSON(raw);if(!p)throw new Error('JSONの取り出しに失敗しました');
+        smFillForm(card,p);
+        card.querySelectorAll('.sm-itab').forEach(function(t){t.classList.toggle('on',t.dataset.smit==='manual');});
+        card.querySelectorAll('.sm-it-pdf,.sm-it-text,.sm-it-manual').forEach(function(pn){pn.style.display='none';});
+        var m=card.querySelector('.sm-it-manual');if(m)m.style.display='block';
+        smSetAI(aiBar,'ai-ok','✅ 解析完了！内容を確認して「追加」を押してください');
+      }catch(e){smSetAI(aiBar,'ai-err','❌ '+e.message);}
+    });
+  });
 }
 
 function buildSmJobFormHtml(gid){
-  return '<div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:12px">📝 新しい案件を追加</div>'
+  var uid = gid; // グループIDをIDプレフィックスとして使い干渉を防ぐ
+  return '<div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:12px">📝 案件を追加</div>'
+    // ─ タブ切り替え ─
+    +'<div class="itabs" style="margin-bottom:12px">'
+      +'<button class="itab on sm-itab" data-smit="pdf" data-gid="'+esc(gid)+'">📑 PDF</button>'
+      +'<button class="itab sm-itab" data-smit="text" data-gid="'+esc(gid)+'">📝 テキスト貼付</button>'
+      +'<button class="itab sm-itab" data-smit="manual" data-gid="'+esc(gid)+'">✏️ 手動入力</button>'
+    +'</div>'
+    // ─ PDFタブ ─
+    +'<div class="sm-it-pdf" style="margin-bottom:12px">'
+      +'<div style="font-size:12px;color:var(--t3);margin-bottom:8px;line-height:1.6">案件票のPDFをアップロードするとAIが自動で内容を解析して入力します。</div>'
+      +'<div style="background:var(--g100);border:2px dashed var(--g300);border-radius:var(--rs);padding:14px;text-align:center">'
+        +'<label style="cursor:pointer;display:block">'
+          +'<div style="font-size:20px;margin-bottom:4px">📑</div>'
+          +'<div style="font-size:13px;font-weight:700;color:var(--blue)">PDFをクリックして選択</div>'
+          +'<div style="font-size:11px;color:var(--t3);margin-top:2px">案件票・募集要項など</div>'
+          +'<input type="file" accept=".pdf" class="sm-pdf-input" style="display:none">'
+        +'</label>'
+      +'</div>'
+      +'<div class="ai-bar sm-ai-pdf" style="display:none;margin-top:8px"><span class="ai-sp"></span><span class="ai-msg"></span></div>'
+    +'</div>'
+    // ─ テキストタブ ─
+    +'<div class="sm-it-text" style="display:none;margin-bottom:12px">'
+      +'<div style="font-size:12px;color:var(--t3);margin-bottom:8px;line-height:1.6">案件内容をテキストで貼り付けるとAIが自動で解析して入力します。</div>'
+      +'<textarea class="fi sm-paste-area" rows="6" placeholder="案件内容をここに貼り付けてください&#10;（メール文・募集要項・Webページのテキストなど）" style="margin-bottom:8px"></textarea>'
+      +'<button class="sm-parse-btn parse-btn" style="width:100%">🔍 解析して自動入力（APIキー必要）</button>'
+      +'<div class="ai-bar sm-ai-text" style="display:none;margin-top:8px"><span class="ai-sp"></span><span class="ai-msg"></span></div>'
+    +'</div>'
+    // ─ 手動入力タブ（デフォルト非表示） ─
+    +'<div class="sm-it-manual" style="display:none">'
     +'<div class="fg">'
       +'<div class="fg-full fgrp" style="margin-bottom:10px"><label class="flbl">案件名 <span style="color:var(--red)">*</span></label>'
         +'<input class="fi sm-job-title" placeholder="例：〇〇映画 出演者募集"></div>'
@@ -838,11 +930,23 @@ function buildSmJobFormHtml(gid){
       +'<div class="fg-full fgrp" style="margin-bottom:12px"><label class="flbl">エントリー時の注意事項</label>'
         +'<textarea class="fi sm-job-guide" rows="2" placeholder="🎭【必須】希望配役を明記など"></textarea></div>'
     +'</div>'
-    +'<button data-sm-save-job="'+esc(gid)+'" style="width:100%;padding:12px;background:var(--blue);color:#fff;border:none;border-radius:var(--rs);font-size:14px;font-weight:800;cursor:pointer">この案件をグループに追加する</button>';
+    +'</div>'
+    // ─ 保存ボタン（常に表示） ─
+    +'<button data-sm-save-job="'+esc(gid)+'" style="width:100%;padding:12px;background:var(--blue);color:#fff;border:none;border-radius:var(--rs);font-size:14px;font-weight:800;cursor:pointer;margin-top:10px">この案件をグループに追加する</button>';
 }
 
 function saveSmJobInGroup(gid){
   var card=event.target.closest('.gcard');if(!card)return;
+  // 手動入力パネルを必ず表示してから値を取得
+  var manualPanel=card.querySelector('.sm-it-manual');
+  if(manualPanel&&(manualPanel.style.display==='none'||manualPanel.style.display==='')){
+    // 手動タブに切り替え
+    card.querySelectorAll('.sm-itab').forEach(function(t){t.classList.toggle('on',t.dataset.smit==='manual');});
+    card.querySelectorAll('.sm-it-pdf,.sm-it-text,.sm-it-manual').forEach(function(p){p.style.display='none';});
+    manualPanel.style.display='block';
+    showToast('💡 手動入力タブに切り替えました。案件名を入力して再度「追加」を押してください');
+    return;
+  }
   var t=(card.querySelector('.sm-job-title').value||'').trim();
   if(!t){showToast('⚠️ 案件名は必須です');return;}
   var job={id:'j'+Date.now(),groupId:gid,
@@ -896,6 +1000,46 @@ function fbSmCopy(text){
   document.body.appendChild(ta);ta.select();
   try{document.execCommand('copy');showToast('📋 コピーしました');}catch(e){showToast('⚠️ コピーできませんでした');}
   document.body.removeChild(ta);
+}
+
+/* グループ内フォーム用AIステータス表示 */
+function smSetAI(bar, cls, msg){
+  if(!bar) return;
+  bar.style.display='flex';
+  bar.className='ai-bar '+cls;
+  var sp=bar.querySelector('.ai-sp');
+  var mg=bar.querySelector('.ai-msg');
+  if(sp) sp.style.display=(cls==='ai-l')?'block':'none';
+  if(mg) mg.textContent=msg;
+}
+
+/* グループ内フォームにAI解析結果を流し込む */
+function smFillForm(card, p){
+  function sv(cls, v){
+    if(v==null) return;
+    var el=card.querySelector(cls);
+    if(!el) return;
+    el.value=Array.isArray(v)?v.join(', '):String(v);
+  }
+  sv('.sm-job-title',  p.title);
+  sv('.sm-job-client', p.client);
+  sv('.sm-job-slots',  p.slots);
+  sv('.sm-job-workdate',p.workdate);
+  sv('.sm-job-budget', p.budget);
+  sv('.sm-job-desc',   p.desc);
+  sv('.sm-job-guide',  p.entryGuide);
+  if(p.deadline&&/^\d{4}-\d{2}-\d{2}$/.test(p.deadline)){
+    var dl=card.querySelector('.sm-job-deadline');
+    if(dl) dl.value=p.deadline;
+  }
+  if(p.type&&['sns','film','model','other'].indexOf(p.type)!==-1){
+    var tp=card.querySelector('.sm-job-type');
+    if(tp) tp.value=p.type;
+  }
+  if(p.priority&&['high','mid','low'].indexOf(p.priority)!==-1){
+    var pr=card.querySelector('.sm-job-priority');
+    if(pr) pr.value=p.priority;
+  }
 }
 
 
