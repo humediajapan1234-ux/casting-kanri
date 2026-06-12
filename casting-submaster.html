@@ -217,6 +217,7 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
   <nav class="sidebar">
     <div class="sb-lbl">メニュー</div>
     <button class="sb-btn on" data-sub="dash"><span class="sb-ic">📊</span>ダッシュボード</button>
+    <button class="sb-btn" data-sub="grp"><span class="sb-ic">👥</span>グループ管理</button>
     <button class="sb-btn" data-sub="jobs"><span class="sb-ic">📋</span>案件管理</button>
     <button class="sb-btn" data-sub="pub"><span class="sb-ic">📡</span>配信管理</button>
     <button class="sb-btn" data-sub="ent" style="position:relative"><span class="sb-ic">📩</span>エントリー管理<span class="sb-dot" id="sb-dot">0</span></button>
@@ -227,6 +228,7 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
   <main class="content">
     <div class="mob-tabs">
       <button class="mtab on" data-sub="dash">📊</button>
+      <button class="mtab" data-sub="grp">👥</button>
       <button class="mtab" data-sub="jobs">📋</button>
       <button class="mtab" data-sub="pub">📡</button>
       <button class="mtab" data-sub="ent">📩</button>
@@ -240,6 +242,43 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
       <div class="stats" id="dash-stats"></div>
       <div class="shd">📩 直近のエントリー</div>
       <div id="dash-recent"></div>
+    </div>
+
+    <!-- グループ管理 -->
+    <div class="sub" id="sub-grp">
+      <div class="shd">👥 グループ管理</div>
+
+      <!-- グループ作成フォーム -->
+      <div class="card" style="border-top:3px solid var(--blue);margin-bottom:16px">
+        <div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:4px">➕ 新しいグループを発行</div>
+        <div style="font-size:12px;color:var(--t3);margin-bottom:18px;line-height:1.7">
+          グループを発行すると、専用のログインID・パスワードが発行されます。<br>
+          担当者はそのグループの案件・応募だけを管理できます。
+        </div>
+        <div class="fg" style="margin-bottom:0">
+          <div class="fgrp" style="margin-bottom:14px">
+            <label class="flbl">グループ名 <span style="color:var(--red)">*</span></label>
+            <input class="fi" id="sm-g-name" placeholder="例：東京チーム／〇〇代理店">
+          </div>
+          <div class="fgrp" style="margin-bottom:14px">
+            <label class="flbl">担当者メール（ログインID）<span style="color:var(--red)">*</span></label>
+            <input class="fi" id="sm-g-email" type="email" placeholder="例：tokyo@humedia.com">
+          </div>
+          <div class="fg-full fgrp" style="margin-bottom:18px">
+            <label class="flbl">パスワード <span style="color:var(--red)">*</span></label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input class="fi" id="sm-g-pw" type="text" style="flex:1;font-family:monospace;letter-spacing:.08em;font-size:15px">
+              <button id="gen-sm-g-pw" type="button" style="padding:10px 14px;background:var(--g100);color:var(--g600);border:1.5px solid var(--g200);border-radius:var(--rs);font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap">再生成</button>
+            </div>
+            <span style="font-size:11px;color:var(--t3);margin-top:5px;display:block">自動生成されたパスワードです。変更したい場合は直接編集または再生成してください。</span>
+          </div>
+        </div>
+        <button id="create-sm-group" style="width:100%;padding:14px;background:var(--blue);color:var(--w);border:none;border-radius:var(--rs);font-size:15px;font-weight:800;cursor:pointer">グループを発行する</button>
+      </div>
+
+      <!-- グループ一覧（案件欄付き） -->
+      <div class="shd">📋 グループ一覧</div>
+      <div id="sm-group-list"></div>
     </div>
 
     <!-- 案件管理 -->
@@ -443,6 +482,20 @@ var GAS_URL = 'https://script.google.com/macros/s/AKfycbx1RtttrO7t_qvOpzf-QU9sGj
 var SESSION_KEY = 'casting_submaster_session';
 var APIKEY_KEY  = 'casting_api_key';
 
+/* ─ グループ管理に必要なユーティリティ ─ */
+function genId(){ return 'grp'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function genPw(){
+  var c='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  var s=''; for(var i=0;i<8;i++){s+=c[Math.floor(Math.random()*c.length)];} return s;
+}
+function pushGroups(cb){
+  if(!gasConfigured()){ if(cb)cb(false); return; }
+  fetch(GAS_URL, {method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({action:'saveGroups', groups:groups})})
+    .then(function(r){return r.json();}).then(function(res){if(cb)cb(res&&res.ok);})
+    .catch(function(){if(cb)cb(false);});
+}
+
 var SC = {
   pending:  {lb:'確認待ち', col:'#B45309', bg:'#FEF7E0'},
   reviewing:{lb:'選考中',   col:'#1D4ED8', bg:'#EFF6FF'},
@@ -607,7 +660,7 @@ document.getElementById('logout-btn').addEventListener('click', function(){
 function initAdmin(){
   checkApiNotice();
   pullData(function(){
-    updBadge(); updJSel(); renderDash(); renderAJ(); renderEnt(); renderPubList();
+    updBadge(); updJSel(); renderDash(); renderAJ(); renderEnt(); renderPubList(); renderSmGroups();
     updGroupSel();
   });
   setInterval(function(){
@@ -638,6 +691,214 @@ function updGroupSel(){
   sel.addEventListener('change', function(){ currentGroupId=this.value||null; });
 }
 
+/* ════════════════════════════════════════
+   グループ管理（サブマスターが発行・案件管理）
+════════════════════════════════════════ */
+
+document.getElementById('gen-sm-g-pw').addEventListener('click',function(){
+  document.getElementById('sm-g-pw').value=genPw();
+});
+(function(){var p=document.getElementById('sm-g-pw');if(p&&!p.value)p.value=genPw();})();
+
+document.getElementById('create-sm-group').addEventListener('click',function(){
+  var name =(document.getElementById('sm-g-name').value||'').trim();
+  var email=(document.getElementById('sm-g-email').value||'').trim();
+  var pw   =(document.getElementById('sm-g-pw').value||'').trim();
+  if(!name){showToast('⚠️ グループ名は必須です');return;}
+  if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){showToast('⚠️ 正しいメールアドレスを入力してください');return;}
+  if(!pw){showToast('⚠️ パスワードを入力または再生成してください');return;}
+  if(groups.some(function(g){return (g.adminEmail||'').toLowerCase()===email.toLowerCase();})){
+    showToast('⚠️ このメールアドレスは既に使われています');return;
+  }
+  var g={id:genId(),name:name,adminEmail:email,adminPassword:pw,
+    submasterId:(currentUser?currentUser.id:''),createdAt:new Date().toISOString()};
+  groups.push(g);
+  currentGroupIds.push(g.id);
+  try{var sess=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');
+    if(sess){sess.groupIds=currentGroupIds;localStorage.setItem(SESSION_KEY,JSON.stringify(sess));}}catch(e){}
+  document.getElementById('sm-g-name').value='';
+  document.getElementById('sm-g-email').value='';
+  document.getElementById('sm-g-pw').value=genPw();
+  pushGroups(function(ok){showToast(ok?'✅ グループを発行しました':'⚠️ サーバー保存に失敗しました');});
+  updGroupSel();renderSmGroups();renderDash();
+});
+
+function renderSmGroups(){
+  var el=document.getElementById('sm-group-list');if(!el)return;
+  var myGroups=groups.filter(function(g){return currentGroupIds.indexOf(g.id)!==-1;});
+  if(!myGroups.length){
+    el.innerHTML='<div class="empty"><div class="empty-ic">👥</div><div class="empty-t">担当グループがまだありません</div><div style="font-size:13px;margin-top:6px;color:var(--t3)">上のフォームからグループを発行してください</div></div>';
+    return;
+  }
+  var baseUrl=location.href.replace(/[^\/]*$/,'');
+  el.innerHTML='';
+  myGroups.forEach(function(g){
+    var gJobs=jobs.filter(function(j){return j.groupId===g.id;});
+    var gEntries=entries.filter(function(e){return e.groupId===g.id;});
+    var gPending=gEntries.filter(function(e){return e.status==='pending';}).length;
+    var pubUrl=baseUrl+'public.html?g='+g.id;
+    var card=document.createElement('div');
+    card.className='gcard';
+    card.style.cssText='border-left:4px solid var(--blue);margin-bottom:16px';
+    // ヘッダー
+    var head=document.createElement('div');
+    head.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px';
+    head.innerHTML='<div><div class="gcard-name">'+esc(g.name)+'</div>'
+      +'<div class="gcard-id">ID: '+esc(g.id)+'</div></div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">'
+        +'<button data-sm-copy="'+esc(g.id)+'" class="gbtn" style="background:var(--glt);color:var(--green)">📋 案内文</button>'
+        +'<a href="'+esc(pubUrl)+'" target="_blank" rel="noopener" class="gbtn" style="background:var(--blt);color:var(--blue)">公開ページ</a>'
+        +'<button data-sm-del="'+esc(g.id)+'" class="gbtn gbtn-del">削除</button>'
+      +'</div>';
+    card.appendChild(head);
+    // 統計
+    var stats=document.createElement('div');
+    stats.className='gcard-stats';
+    stats.innerHTML='<div class="gst"><div class="gst-n">'+gJobs.length+'</div><div class="gst-l">案件</div></div>'
+      +'<div class="gst"><div class="gst-n">'+gEntries.length+'</div><div class="gst-l">応募</div></div>'
+      +'<div class="gst"><div class="gst-n" style="color:var(--amber)">'+gPending+'</div><div class="gst-l">未対応</div></div>';
+    card.appendChild(stats);
+    // ログイン情報
+    var cred=document.createElement('div');
+    cred.className='cred';cred.style.marginBottom='12px';
+    cred.innerHTML='<div class="cred-row"><span class="cred-k">ログインID</span><span class="cred-v">'+esc(g.adminEmail)+'</span></div>'
+      +'<div class="cred-row"><span class="cred-k">パスワード</span><span class="cred-v">'+esc(g.adminPassword)+'</span></div>'
+      +'<div class="cred-row"><span class="cred-k">公開ページURL</span><span class="cred-v" style="color:var(--blue)">'+esc(pubUrl)+'</span></div>';
+    card.appendChild(cred);
+    // 案件一覧ヘッダー
+    var jobHead=document.createElement('div');
+    jobHead.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px';
+    jobHead.innerHTML='<div style="font-size:13px;font-weight:800;color:var(--t2)">📋 このグループの案件（'+gJobs.length+'件）</div>';
+    var toggleBtn=document.createElement('button');
+    toggleBtn.style.cssText='background:var(--blt);color:var(--blue);border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer';
+    toggleBtn.textContent='＋ 案件を追加';
+    jobHead.appendChild(toggleBtn);
+    card.appendChild(jobHead);
+    // 既存案件リスト
+    var jobList=document.createElement('div');jobList.style.cssText='margin-bottom:8px';
+    if(gJobs.length){
+      gJobs.forEach(function(j){
+        var jRow=document.createElement('div');
+        jRow.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;background:var(--g50);border:1px solid var(--g200);border-radius:7px;margin-bottom:6px';
+        var pri=j.priority==='high'?'🔴':j.priority==='mid'?'🟡':'⚪';
+        jRow.innerHTML='<div style="min-width:0;flex:1">'
+          +'<div style="font-size:13px;font-weight:700;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+pri+' '+esc(j.title)+'</div>'
+          +'<div style="font-size:11px;color:var(--t3);margin-top:2px">締切：'+esc(j.deadline||'未設定')+'　報酬：'+esc(j.budget||'未設定')+'</div>'
+          +'</div>'
+          +'<div style="display:flex;gap:4px;flex-shrink:0">'
+            +'<button data-sm-edit-jid="'+esc(j.id)+'" style="background:var(--blt);color:var(--blue);border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">編集</button>'
+            +'<button data-sm-del-jid="'+esc(j.id)+'" style="background:var(--rlt);color:var(--red);border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">削除</button>'
+          +'</div>';
+        jobList.appendChild(jRow);
+      });
+    }else{
+      jobList.innerHTML='<div style="font-size:12px;color:var(--t3);padding:8px 0">まだ案件がありません</div>';
+    }
+    card.appendChild(jobList);
+    // 案件追加フォーム
+    var formWrap=document.createElement('div');
+    formWrap.style.cssText='display:none;background:var(--blt);border:1.5px solid var(--bmd);border-radius:var(--rs);padding:14px;margin-top:4px';
+    formWrap.innerHTML=buildSmJobFormHtml(g.id);
+    card.appendChild(formWrap);
+    toggleBtn.addEventListener('click',function(){
+      var isH=formWrap.style.display==='none'||formWrap.style.display==='';
+      formWrap.style.display=isH?'block':'none';
+      toggleBtn.textContent=isH?'▲ 閉じる':'＋ 案件を追加';
+    });
+    el.appendChild(card);
+  });
+  el.querySelectorAll('[data-sm-del]').forEach(function(b){b.addEventListener('click',function(){delSmGroup(this.dataset.smDel);});});
+  el.querySelectorAll('[data-sm-copy]').forEach(function(b){b.addEventListener('click',function(){copySmGroupGuide(this.dataset.smCopy);});});
+  el.querySelectorAll('[data-sm-del-jid]').forEach(function(b){b.addEventListener('click',function(){delSmJobFromGroup(this.dataset.smDelJid);});});
+  el.querySelectorAll('[data-sm-edit-jid]').forEach(function(b){b.addEventListener('click',function(){editSmJobInGroup(this.dataset.smEditJid);});});
+  el.querySelectorAll('[data-sm-save-job]').forEach(function(b){b.addEventListener('click',function(){saveSmJobInGroup(this.dataset.smSaveJob);});});
+}
+
+function buildSmJobFormHtml(gid){
+  return '<div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:12px">📝 新しい案件を追加</div>'
+    +'<div class="fg">'
+      +'<div class="fg-full fgrp" style="margin-bottom:10px"><label class="flbl">案件名 <span style="color:var(--red)">*</span></label>'
+        +'<input class="fi sm-job-title" placeholder="例：〇〇映画 出演者募集"></div>'
+      +'<div class="fgrp" style="margin-bottom:10px"><label class="flbl">クライアント名</label>'
+        +'<input class="fi sm-job-client" placeholder="会社・ブランド名"></div>'
+      +'<div class="fgrp" style="margin-bottom:10px"><label class="flbl">案件種別</label>'
+        +'<select class="fi sm-job-type"><option value="sns">SNS/インフルエンサー</option><option value="film">映画/ドラマ/CM</option><option value="model">モデル/撮影</option><option value="other">その他</option></select></div>'
+      +'<div class="fgrp" style="margin-bottom:10px"><label class="flbl">採用人数</label>'
+        +'<input class="fi sm-job-slots" type="number" placeholder="1" min="1"></div>'
+      +'<div class="fgrp" style="margin-bottom:10px"><label class="flbl">優先度</label>'
+        +'<select class="fi sm-job-priority"><option value="high">🔴 急募</option><option value="mid">🟡 通常</option><option value="low">⚪ 低</option></select></div>'
+      +'<div class="fgrp" style="margin-bottom:10px"><label class="flbl">稼働日</label>'
+        +'<input class="fi sm-job-workdate" placeholder="例：7/4（土）・7/5（日）"></div>'
+      +'<div class="fgrp" style="margin-bottom:10px"><label class="flbl">締切日</label>'
+        +'<input class="fi sm-job-deadline" type="date"></div>'
+      +'<div class="fgrp" style="margin-bottom:10px"><label class="flbl">報酬</label>'
+        +'<input class="fi sm-job-budget" placeholder="例：1日1万円（交通費込）"></div>'
+      +'<div class="fg-full fgrp" style="margin-bottom:10px"><label class="flbl">案件詳細</label>'
+        +'<textarea class="fi sm-job-desc" rows="4" placeholder="募集内容・条件など"></textarea></div>'
+      +'<div class="fg-full fgrp" style="margin-bottom:12px"><label class="flbl">エントリー時の注意事項</label>'
+        +'<textarea class="fi sm-job-guide" rows="2" placeholder="🎭【必須】希望配役を明記など"></textarea></div>'
+    +'</div>'
+    +'<button data-sm-save-job="'+esc(gid)+'" style="width:100%;padding:12px;background:var(--blue);color:#fff;border:none;border-radius:var(--rs);font-size:14px;font-weight:800;cursor:pointer">この案件をグループに追加する</button>';
+}
+
+function saveSmJobInGroup(gid){
+  var card=event.target.closest('.gcard');if(!card)return;
+  var t=(card.querySelector('.sm-job-title').value||'').trim();
+  if(!t){showToast('⚠️ 案件名は必須です');return;}
+  var job={id:'j'+Date.now(),groupId:gid,
+    title:t,client:(card.querySelector('.sm-job-client').value||'').trim(),
+    type:card.querySelector('.sm-job-type').value,
+    slots:parseInt(card.querySelector('.sm-job-slots').value)||1,
+    priority:card.querySelector('.sm-job-priority').value,
+    workdate:(card.querySelector('.sm-job-workdate').value||'').trim(),
+    deadline:card.querySelector('.sm-job-deadline').value||null,
+    budget:(card.querySelector('.sm-job-budget').value||'').trim(),
+    desc:(card.querySelector('.sm-job-desc').value||'').trim(),
+    entryGuide:(card.querySelector('.sm-job-guide').value||'').trim(),
+    extraFields:[],tags:[],composite:'none',createdAt:new Date().toISOString()};
+  jobs.unshift(job);
+  pushJobs(function(ok){showToast(ok?'✅ 案件を追加しました':'⚠️ サーバー保存に失敗しました');});
+  updJSel();renderSmGroups();renderAJ();renderDash();
+}
+
+function delSmJobFromGroup(jid){
+  if(!confirm('この案件を削除しますか？'))return;
+  jobs=jobs.filter(function(j){return j.id!==jid;});
+  pushJobs(function(){});
+  renderSmGroups();renderAJ();renderDash();updJSel();
+  showToast('🗑️ 案件を削除しました');
+}
+
+function editSmJobInGroup(jid){
+  showSub('jobs');setTimeout(function(){startEditJob(jid);},150);
+}
+
+function delSmGroup(id){
+  var g=groups.find(function(x){return x.id===id;});if(!g)return;
+  var gJ=jobs.filter(function(j){return j.groupId===id;}).length;
+  if(!confirm('グループ「'+g.name+'」を削除しますか？\n案件('+gJ+'件)のデータはそのまま残りますが、担当者はログインできなくなります。'))return;
+  groups=groups.filter(function(x){return x.id!==id;});
+  currentGroupIds=currentGroupIds.filter(function(i){return i!==id;});
+  try{var sess=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');
+    if(sess){sess.groupIds=currentGroupIds;localStorage.setItem(SESSION_KEY,JSON.stringify(sess));}}catch(e){}
+  pushGroups(function(ok){showToast(ok?'🗑️ グループを削除しました':'⚠️ サーバー保存に失敗しました');});
+  updGroupSel();renderSmGroups();renderDash();
+}
+
+function copySmGroupGuide(id){
+  var g=groups.find(function(x){return x.id===id;});if(!g)return;
+  var baseUrl=location.href.replace(/[^\/]*$/,'');
+  var text='【'+g.name+' 管理ページのご案内】\n\n■ 管理画面URL\n'+baseUrl+'casting-admin.html\n\n■ ログインID\n'+g.adminEmail+'\n\n■ パスワード\n'+g.adminPassword+'\n\n■ 公開ページURL\n'+baseUrl+'public.html?g='+g.id;
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(function(){showToast('📋 案内文をコピーしました');},function(){fbSmCopy(text);});}else{fbSmCopy(text);}
+}
+function fbSmCopy(text){
+  var ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;opacity:0';
+  document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');showToast('📋 コピーしました');}catch(e){showToast('⚠️ コピーできませんでした');}
+  document.body.removeChild(ta);
+}
+
+
 function checkApiNotice(){
   var n=document.getElementById('api-notice');
   if(n) n.style.display=getApiKey()?'none':'block';
@@ -660,6 +921,7 @@ function showSub(s){
   if(s==='ent'){ pullData(function(){renderEnt();}); }
   if(s==='dash'){ pullData(function(){renderDash();}); }
   if(s==='pub'){ pullData(function(){renderPubList();}); }
+  if(s==='grp'){ pullData(function(){renderSmGroups();}); }
   if(s==='dl')updJSel();
   if(s==='cfg')checkApiNotice();
 }
