@@ -972,50 +972,196 @@ function renderGroups(){
   var el=document.getElementById('group-list');
   if(!el) return;
   if(!groups.length){
-    el.innerHTML='<div class="empty"><div class="empty-ic">📭</div><div class="empty-t">まだ管理ページがありません</div><div style="font-size:13px;margin-top:6px;color:var(--t3)">上のフォームから最初の管理ページを作成してください</div></div>';
+    el.innerHTML='<div class="empty"><div class="empty-ic">📭</div><div class="empty-t">まだグループがありません</div><div style="font-size:13px;margin-top:6px;color:var(--t3)">上のフォームから作成してください</div></div>';
     return;
   }
-  var baseUrl = location.href.replace(/[^\/]*$/, '');
-  var ADMIN_PAGE = 'casting-admin.html';
-  var PUBLIC_PAGE = 'public.html';
-  var html='';
+  var baseUrl=location.href.replace(/[^\/]*$/,'');
+  var PUBLIC_PAGE='public.html';
+  el.innerHTML='';
   groups.forEach(function(g){
-    var gJobs    = jobs.filter(function(j){return j.groupId===g.id;}).length;
-    var gEntries = entries.filter(function(e){return e.groupId===g.id;}).length;
-    var gPending = entries.filter(function(e){return e.groupId===g.id&&e.status==='pending';}).length;
-    var adminUrl = baseUrl + ADMIN_PAGE;
-    var pubUrl   = baseUrl + PUBLIC_PAGE + '?g=' + g.id;
-    html+=
-      '<div class="gcard">'+
-        '<div class="gcard-top">'+
-          '<div><div class="gcard-name">'+esc(g.name)+'</div>'+
-            '<div class="gcard-id">ID: '+esc(g.id)+'</div></div>'+
-          '<button class="gbtn gbtn-del" data-del="'+esc(g.id)+'">削除</button>'+
-        '</div>'+
-        '<div class="gcard-stats">'+
-          '<div class="gst"><div class="gst-n">'+gJobs+'</div><div class="gst-l">案件</div></div>'+
-          '<div class="gst"><div class="gst-n">'+gEntries+'</div><div class="gst-l">応募</div></div>'+
-          '<div class="gst"><div class="gst-n" style="color:var(--amber)">'+gPending+'</div><div class="gst-l">未対応</div></div>'+
-        '</div>'+
-        '<div class="cred">'+
-          '<div class="cred-row"><span class="cred-k">ログインID</span><span class="cred-v">'+esc(g.adminEmail)+'</span></div>'+
-          '<div class="cred-row"><span class="cred-k">パスワード</span><span class="cred-v">'+esc(g.adminPassword)+'</span></div>'+
-          '<div class="cred-row"><span class="cred-k">管理画面URL</span><span class="cred-v">'+esc(adminUrl)+'</span></div>'+
-          '<div class="cred-row"><span class="cred-k">公開ページURL</span><span class="cred-v">'+esc(pubUrl)+'</span></div>'+
-        '</div>'+
-        '<div class="gact-row">'+
-          '<button class="gbtn gbtn-copy" data-copy="'+esc(g.id)+'">📋 担当者への案内文をコピー</button>'+
-          '<a class="gbtn gbtn-view" href="'+esc(pubUrl)+'" target="_blank" rel="noopener">公開ページを見る</a>'+
-        '</div>'+
-      '</div>';
+    var gJobs    = jobs.filter(function(j){return j.groupId===g.id;});
+    var gEntries = entries.filter(function(e){return e.groupId===g.id;});
+    var gPending = gEntries.filter(function(e){return e.status==='pending';}).length;
+    var pubUrl   = baseUrl+PUBLIC_PAGE+'?g='+g.id;
+
+    // グループカード
+    var card=document.createElement('div');
+    card.className='gcard';
+    card.style.marginBottom='16px';
+
+    // ─ ヘッダー ─
+    var head=document.createElement('div');
+    head.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px';
+    head.innerHTML=
+      '<div>'
+        +'<div class="gcard-name">'+esc(g.name)+'</div>'
+        +'<div class="gcard-id">ID: '+esc(g.id)+'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">'
+        +'<button class="gbtn gbtn-copy" data-copy="'+esc(g.id)+'">📋 案内文</button>'
+        +'<a class="gbtn gbtn-view" href="'+esc(pubUrl)+'" target="_blank" rel="noopener">公開ページ</a>'
+        +'<button class="gbtn gbtn-del" data-del="'+esc(g.id)+'">削除</button>'
+      +'</div>';
+    card.appendChild(head);
+
+    // ─ 統計 ─
+    var stats=document.createElement('div');
+    stats.className='gcard-stats';
+    stats.innerHTML=
+      '<div class="gst"><div class="gst-n">'+gJobs.length+'</div><div class="gst-l">案件</div></div>'
+      +'<div class="gst"><div class="gst-n">'+gEntries.length+'</div><div class="gst-l">応募</div></div>'
+      +'<div class="gst"><div class="gst-n" style="color:var(--amber)">'+gPending+'</div><div class="gst-l">未対応</div></div>';
+    card.appendChild(stats);
+
+    // ─ ログイン情報 ─
+    var cred=document.createElement('div');
+    cred.className='cred';
+    cred.style.marginBottom='12px';
+    cred.innerHTML=
+      '<div class="cred-row"><span class="cred-k">ログインID</span><span class="cred-v">'+esc(g.adminEmail)+'</span></div>'
+      +'<div class="cred-row"><span class="cred-k">パスワード</span><span class="cred-v">'+esc(g.adminPassword)+'</span></div>'
+      +'<div class="cred-row"><span class="cred-k">公開ページURL</span><span class="cred-v" style="color:var(--blue)">'+esc(pubUrl)+'</span></div>';
+    card.appendChild(cred);
+
+    // ─ 案件一覧ヘッダー ─
+    var jobHead=document.createElement('div');
+    jobHead.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px';
+    jobHead.innerHTML='<div style="font-size:13px;font-weight:800;color:var(--t2)">📋 このグループの案件（'+gJobs.length+'件）</div>';
+    var toggleBtn=document.createElement('button');
+    toggleBtn.style.cssText='background:var(--blt);color:var(--blue);border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer';
+    toggleBtn.textContent='＋ 案件を追加';
+    jobHead.appendChild(toggleBtn);
+    card.appendChild(jobHead);
+
+    // ─ 既存案件リスト ─
+    var jobList=document.createElement('div');
+    jobList.style.cssText='margin-bottom:8px';
+    if(gJobs.length){
+      gJobs.forEach(function(j){
+        var jRow=document.createElement('div');
+        jRow.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;background:var(--g50);border:1px solid var(--g200);border-radius:7px;margin-bottom:6px';
+        var dl=j.deadline?j.deadline:'未設定';
+        var pri=j.priority==='high'?'🔴':j.priority==='mid'?'🟡':'⚪';
+        jRow.innerHTML=
+          '<div style="min-width:0;flex:1">'
+            +'<div style="font-size:13px;font-weight:700;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+pri+' '+esc(j.title)+'</div>'
+            +'<div style="font-size:11px;color:var(--t3);margin-top:2px">締切：'+esc(dl)+'　報酬：'+esc(j.budget||'未設定')+'</div>'
+          +'</div>'
+          +'<div style="display:flex;gap:4px;flex-shrink:0">'
+            +'<button data-edit-jid="'+esc(j.id)+'" data-edit-gid="'+esc(g.id)+'" style="background:var(--blt);color:var(--blue);border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">編集</button>'
+            +'<button data-del-jid="'+esc(j.id)+'" style="background:var(--rlt);color:var(--red);border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">削除</button>'
+          +'</div>';
+        jobList.appendChild(jRow);
+      });
+    }else{
+      jobList.innerHTML='<div style="font-size:12px;color:var(--t3);padding:8px 0">まだ案件がありません</div>';
+    }
+    card.appendChild(jobList);
+
+    // ─ 案件追加フォーム（初期非表示） ─
+    var formWrap=document.createElement('div');
+    formWrap.style.display='none';
+    formWrap.style.cssText='display:none;background:var(--blt);border:1.5px solid var(--bmd);border-radius:var(--rs);padding:14px;margin-top:4px';
+    formWrap.innerHTML=buildJobFormHtml(g.id);
+    card.appendChild(formWrap);
+
+    // ─ トグルボタンのイベント ─
+    toggleBtn.addEventListener('click',function(){
+      var isHidden=formWrap.style.display==='none'||formWrap.style.display==='';
+      formWrap.style.display=isHidden?'block':'none';
+      toggleBtn.textContent=isHidden?'▲ 閉じる':'＋ 案件を追加';
+    });
+
+    el.appendChild(card);
   });
-  el.innerHTML=html;
+
+  // 全カードのイベントをバインド
   el.querySelectorAll('[data-del]').forEach(function(b){
     b.addEventListener('click',function(){delGroup(this.dataset.del);});
   });
   el.querySelectorAll('[data-copy]').forEach(function(b){
     b.addEventListener('click',function(){copyGuide(this.dataset.copy);});
   });
+  el.querySelectorAll('[data-del-jid]').forEach(function(b){
+    b.addEventListener('click',function(){delJobFromGroup(this.dataset.delJid);});
+  });
+  el.querySelectorAll('[data-edit-jid]').forEach(function(b){
+    b.addEventListener('click',function(){editJobInGroup(this.dataset.editJid,this.dataset.editGid);});
+  });
+  el.querySelectorAll('[data-save-job]').forEach(function(b){
+    b.addEventListener('click',function(){saveJobInGroup(this.dataset.saveJob);});
+  });
+}
+
+/* グループ内案件フォームのHTML */
+function buildJobFormHtml(gid){
+  return '<div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:12px">📝 新しい案件を追加</div>'
+    +'<div class="fg">'
+      +'<div class="fg-full fgrp" style="margin-bottom:10px"><label class="flbl">案件名 <span style="color:var(--red)">*</span></label>'
+        +'<input class="fi grp-job-title" placeholder="例：〇〇映画 出演者募集"></div>'
+      +'<div class="fgrp" style="margin-bottom:10px"><label class="flbl">クライアント名</label>'
+        +'<input class="fi grp-job-client" placeholder="会社・ブランド名"></div>'
+      +'<div class="fgrp" style="margin-bottom:10px"><label class="flbl">案件種別</label>'
+        +'<select class="fi grp-job-type"><option value="sns">SNS/インフルエンサー</option><option value="film">映画/ドラマ/CM</option><option value="model">モデル/撮影</option><option value="other">その他</option></select></div>'
+      +'<div class="fgrp" style="margin-bottom:10px"><label class="flbl">採用人数</label>'
+        +'<input class="fi grp-job-slots" type="number" placeholder="1" min="1"></div>'
+      +'<div class="fgrp" style="margin-bottom:10px"><label class="flbl">優先度</label>'
+        +'<select class="fi grp-job-priority"><option value="high">🔴 急募</option><option value="mid">🟡 通常</option><option value="low">⚪ 低</option></select></div>'
+      +'<div class="fgrp" style="margin-bottom:10px"><label class="flbl">稼働日</label>'
+        +'<input class="fi grp-job-workdate" placeholder="例：7/4（土）・7/5（日）"></div>'
+      +'<div class="fgrp" style="margin-bottom:10px"><label class="flbl">締切日</label>'
+        +'<input class="fi grp-job-deadline" type="date"></div>'
+      +'<div class="fgrp" style="margin-bottom:10px"><label class="flbl">報酬</label>'
+        +'<input class="fi grp-job-budget" placeholder="例：1日1万円（交通費込）"></div>'
+      +'<div class="fg-full fgrp" style="margin-bottom:10px"><label class="flbl">案件詳細</label>'
+        +'<textarea class="fi grp-job-desc" rows="4" placeholder="募集内容・条件など"></textarea></div>'
+      +'<div class="fg-full fgrp" style="margin-bottom:12px"><label class="flbl">エントリー時の注意事項</label>'
+        +'<textarea class="fi grp-job-guide" rows="2" placeholder="🎭【必須】希望配役を明記など"></textarea></div>'
+    +'</div>'
+    +'<button data-save-job="'+esc(gid)+'" style="width:100%;padding:12px;background:var(--blue);color:#fff;border:none;border-radius:var(--rs);font-size:14px;font-weight:800;cursor:pointer">この案件をグループに追加する</button>';
+}
+
+/* グループ内から案件を保存 */
+function saveJobInGroup(gid){
+  var card=event.target.closest('.gcard');
+  if(!card)return;
+  var t=(card.querySelector('.grp-job-title').value||'').trim();
+  if(!t){showToast('⚠️ 案件名は必須です');return;}
+  var job={
+    id:'j'+Date.now(), groupId:gid,
+    title:t,
+    client:(card.querySelector('.grp-job-client').value||'').trim(),
+    type:card.querySelector('.grp-job-type').value,
+    slots:parseInt(card.querySelector('.grp-job-slots').value)||1,
+    priority:card.querySelector('.grp-job-priority').value,
+    workdate:(card.querySelector('.grp-job-workdate').value||'').trim(),
+    deadline:card.querySelector('.grp-job-deadline').value||null,
+    budget:(card.querySelector('.grp-job-budget').value||'').trim(),
+    desc:(card.querySelector('.grp-job-desc').value||'').trim(),
+    entryGuide:(card.querySelector('.grp-job-guide').value||'').trim(),
+    extraFields:[], tags:[], composite:'none',
+    createdAt:new Date().toISOString()
+  };
+  jobs.unshift(job);
+  pushJobs(function(ok){
+    showToast(ok?'✅ 案件を追加しました':'⚠️ サーバー保存に失敗しました');
+  });
+  updJSel(); renderGroups(); renderAJ();
+}
+
+/* グループ内案件の削除 */
+function delJobFromGroup(jid){
+  if(!confirm('この案件を削除しますか？'))return;
+  jobs=jobs.filter(function(j){return j.id!==jid;});
+  pushJobs(function(){});
+  renderGroups(); renderAJ(); renderDash(); updJSel();
+  showToast('🗑️ 案件を削除しました');
+}
+
+/* グループ内案件の編集（案件管理タブへ遷移して編集） */
+function editJobInGroup(jid, gid){
+  showSub('jobs');
+  setTimeout(function(){ startEditJob(jid); }, 150);
 }
 
 function delGroup(id){
@@ -1023,10 +1169,10 @@ function delGroup(id){
   if(!g)return;
   var gJ=jobs.filter(function(j){return j.groupId===id;}).length;
   var gE=entries.filter(function(e){return e.groupId===id;}).length;
-  if(!confirm('管理ページ「'+g.name+'」を削除しますか？\n\n案件('+gJ+'件)・応募('+gE+'件)のデータはそのまま残りますが、担当者はログインできなくなります。'))return;
+  if(!confirm('グループ「'+g.name+'」を削除しますか？\n\n案件('+gJ+'件)・応募('+gE+'件)のデータはそのまま残りますが、担当者はログインできなくなります。'))return;
   groups=groups.filter(function(x){return x.id!==id;});
   renderGroups(); renderDash();
-  pushGroups(function(ok){ showToast(ok?'🗑️ 管理ページを削除しました':'⚠️ サーバー保存に失敗しました'); });
+  pushGroups(function(ok){ showToast(ok?'🗑️ グループを削除しました':'⚠️ サーバー保存に失敗しました'); });
 }
 
 function copyGuide(id){
@@ -1034,12 +1180,10 @@ function copyGuide(id){
   if(!g)return;
   var baseUrl=location.href.replace(/[^\/]*$/,'');
   var text='【'+g.name+' 管理ページのご案内】\n\n'
-    +'以下の情報で管理画面にログインできます。\n\n'
     +'■ 管理画面URL\n'+baseUrl+'casting-admin.html\n\n'
-    +'■ ログインID（メールアドレス）\n'+g.adminEmail+'\n\n'
+    +'■ ログインID\n'+g.adminEmail+'\n\n'
     +'■ パスワード\n'+g.adminPassword+'\n\n'
-    +'■ 応募者に共有する公開ページURL\n'+baseUrl+'public.html?g='+g.id+'\n\n'
-    +'ログイン後、案件の登録・応募者の管理ができます。';
+    +'■ 公開ページURL\n'+baseUrl+'public.html?g='+g.id;
   if(navigator.clipboard&&navigator.clipboard.writeText){
     navigator.clipboard.writeText(text).then(function(){showToast('📋 案内文をコピーしました');},function(){fbCopy(text);});
   }else{fbCopy(text);}
