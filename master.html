@@ -1049,11 +1049,20 @@ function renderGroups(){
     card.style.marginBottom='16px';
 
     // ─ ヘッダー ─
+    // 発行者（サブマスター名）を特定
+    var publisher = submasters.find(function(sm){return sm.id===g.submasterId;});
+    var publisherName = publisher ? publisher.name : (g.submasterId ? '（不明）' : 'マスター');
+    var priceEnabled = !!g.priceEnabled;
     var head=document.createElement('div');
-    head.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px';
+    head.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px';
     head.innerHTML=
       '<div>'
         +'<div class="gcard-name">'+esc(g.name)+'</div>'
+        +'<div class="gcard-id" style="margin-top:2px">発行者：'+esc(publisherName)
+          +(priceEnabled
+            ? ' &nbsp;<span style="background:var(--glt);color:var(--green);font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700">💰 金額入力ページあり</span>'
+            : ' &nbsp;<span style="background:var(--g100);color:var(--t3);font-size:10px;padding:2px 7px;border-radius:4px">金額入力なし</span>')
+        +'</div>'
         +'<div class="gcard-id">ID: '+esc(g.id)+'</div>'
       +'</div>'
       +'<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">'
@@ -1850,6 +1859,12 @@ function openDov(eid){
   html+='</div>';
   html+='<div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:6px;margin-top:12px">管理メモ（内部用）</div>';
   html+='<textarea class="anote" data-eid="'+esc(eid)+'" placeholder="選考メモ・担当者向けメモ">'+esc(e.adminNote||'')+'</textarea>';
+  // LINEメッセージコピーエリア（採用/見送り時に表示）
+  html+='<div id="line-copy-area" style="display:none;margin-top:14px;background:var(--glt);border:1.5px solid #A7F3D0;border-radius:var(--rs);padding:14px">'
+    +'<div style="font-size:12px;font-weight:800;color:var(--green);margin-bottom:8px">📱 LINEメッセージをコピー</div>'
+    +'<div id="line-msg-preview" style="font-size:12px;color:var(--t2);background:var(--w);border:1px solid var(--g200);border-radius:var(--rs);padding:10px;white-space:pre-wrap;line-height:1.7;margin-bottom:10px;max-height:160px;overflow-y:auto"></div>'
+    +'<button id="line-copy-btn" style="width:100%;padding:10px;background:var(--green);color:#fff;border:none;border-radius:var(--rs);font-size:13px;font-weight:800;cursor:pointer">📋 このメッセージをコピーする</button>'
+  +'</div>';
   html+='<div class="btn-row" style="margin-top:14px"><button class="btn btn-g" id="dov-close-inner">閉じる</button></div>';
 
   document.getElementById('dfi').innerHTML=html;
@@ -1857,6 +1872,12 @@ function openDov(eid){
   /* バインド */
   document.getElementById('dov-close-inner').addEventListener('click',closeDov);
   document.querySelector('.mail-btn').addEventListener('click',function(){openMailTo(this.dataset.eid);});
+
+  // 既に採用/見送り状態ならLINEコピーエリアを初期表示
+  if(e.status==='passed'||e.status==='rejected'){
+    var j0=jobs.find(function(x){return x.id===e.jobId;});
+    showLineCopyBtn(e, j0, e.status);
+  }
   document.querySelectorAll('.att-dl').forEach(function(btn){
     btn.addEventListener('click',function(){
       var e2=entries.find(function(x){return x.id===this.dataset.eid;}.bind(this));
@@ -1881,6 +1902,15 @@ function openDov(eid){
       updateEntryOnGas(e3, notify);
       if(notify) showToast('📧 通知メールを送信しました');
 
+      // 採用/見送りのときはLINEメッセージコピーボタンを表示
+      if(newStatus==='passed'||newStatus==='rejected'){
+        var j4=jobs.find(function(x){return x.id===e3.jobId;});
+        showLineCopyBtn(e3, j4, newStatus);
+      }else{
+        var lbtn=document.getElementById('line-copy-area');
+        if(lbtn) lbtn.style.display='none';
+      }
+
       document.querySelectorAll('.st-b').forEach(function(b){
         var c=SC[b.dataset.st]||SC.pending;var on=b.dataset.st===e3.status;
         b.style.background=on?c.bg:'';b.style.color=on?c.col:'';b.style.borderColor=on?c.col:'';
@@ -1896,6 +1926,63 @@ function openDov(eid){
 }
 
 function closeDov(){document.getElementById('dov').classList.remove('on');}
+
+/* ════════════════════════════════════════
+   LINEメッセージコピー
+════════════════════════════════════════ */
+function showLineCopyBtn(entry, job, status){
+  var area = document.getElementById('line-copy-area');
+  var preview = document.getElementById('line-msg-preview');
+  var copyBtn = document.getElementById('line-copy-btn');
+  if(!area||!preview||!copyBtn) return;
+
+  var isPassed = status === 'passed';
+  var jobTitle = job ? job.title : '案件';
+  var msg = buildLineMsg(entry, jobTitle, isPassed);
+
+  preview.textContent = msg;
+  area.style.display = 'block';
+
+  // 既存のイベントを置き換え
+  var newBtn = copyBtn.cloneNode(true);
+  copyBtn.parentNode.replaceChild(newBtn, copyBtn);
+  newBtn.addEventListener('click', function(){
+    var text = preview.textContent;
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){
+        showToast('📋 LINEメッセージをコピーしました');
+        newBtn.textContent='✅ コピーしました！';
+        setTimeout(function(){newBtn.textContent='📋 このメッセージをコピーする';},2500);
+      });
+    }else{
+      var ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;opacity:0';
+      document.body.appendChild(ta);ta.select();
+      try{document.execCommand('copy');showToast('📋 コピーしました');}catch(e){showToast('⚠️ コピーできませんでした');}
+      document.body.removeChild(ta);
+    }
+  });
+}
+
+function buildLineMsg(entry, jobTitle, isPassed){
+  var name = entry.name || 'ご応募者';
+  if(isPassed){
+    return '【ご採用のご連絡】\n\n'
+      + name + ' 様\n\n'
+      + 'この度は「' + jobTitle + '」へのご応募、誠にありがとうございます。\n\n'
+      + '慎重に選考した結果、ぜひ ' + name + ' 様にお願いしたいと思い、ご連絡いたしました。\n\n'
+      + '詳細につきましては、別途ご連絡させていただきます。\n\n'
+      + 'どうぞよろしくお願いいたします。\n'
+      + 'HUMEDIAジャパン';
+  }else{
+    return '【選考結果のご連絡】\n\n'
+      + name + ' 様\n\n'
+      + 'この度は「' + jobTitle + '」へのご応募、誠にありがとうございます。\n\n'
+      + '厳正なる選考の結果、誠に残念ながら今回はご期待に沿えない結果となりました。\n\n'
+      + '今後ともご縁がございましたら、またの機会にご応募いただければ幸いです。\n\n'
+      + 'どうぞよろしくお願いいたします。\n'
+      + 'HUMEDIAジャパン';
+  }
+}
 
 function openMailTo(eid){
   var e=entries.find(function(x){return x.id===eid;});
@@ -1968,17 +2055,39 @@ function dlPDF(){
 document.getElementById('save-api-btn').addEventListener('click',function(){
   var k=(document.getElementById('api-key-input').value||'').trim();
   if(!k){showToast('⚠️ APIキーを入力してください');return;}
-  try{localStorage.setItem(APIKEY_KEY,k);}catch(e){}
-  checkApiNotice();
-  var st=document.getElementById('api-status');st.style.display='block';st.style.color='var(--green)';st.textContent='✅ APIキーを保存しました';
-  showToast('✅ APIキーを保存しました');
+  var btn=this; btn.disabled=true; btn.textContent='保存中...';
+  // GASのsettingsシートに保存（マスターが一元管理）
+  fetch(GAS_URL, {method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({action:'saveApiKey', apiKey:k})})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      btn.disabled=false; btn.textContent='GASに保存する';
+      if(res&&res.ok){
+        checkApiNotice();
+        var st=document.getElementById('api-status');
+        if(st){st.style.display='block';st.style.color='var(--green)';st.textContent='✅ APIキーをGASに保存しました（全ユーザーで共有されます）';}
+        showToast('✅ APIキーをGASに保存しました');
+        document.getElementById('api-key-input').value='';
+      }else{
+        showToast('⚠️ 保存に失敗しました：'+(res&&res.error||'不明なエラー'));
+      }
+    })
+    .catch(function(){
+      btn.disabled=false; btn.textContent='GASに保存する';
+      showToast('⚠️ 通信エラーが発生しました');
+    });
 });
 document.getElementById('clear-api-btn').addEventListener('click',function(){
-  try{localStorage.removeItem(APIKEY_KEY);}catch(e){}
-  document.getElementById('api-key-input').value='';
-  checkApiNotice();
-  var st=document.getElementById('api-status');st.style.display='block';st.style.color='var(--red)';st.textContent='🗑️ APIキーを削除しました';
-  showToast('🗑️ APIキーを削除しました');
+  if(!confirm('APIキーを削除しますか？\nサブマスターのAI解析が使えなくなります。'))return;
+  fetch(GAS_URL, {method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({action:'saveApiKey', apiKey:''})})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      checkApiNotice();
+      var st=document.getElementById('api-status');
+      if(st){st.style.display='block';st.style.color='var(--red)';st.textContent='🗑️ APIキーを削除しました';}
+      showToast('🗑️ APIキーを削除しました');
+    }).catch(function(){showToast('⚠️ 通信エラーが発生しました');});
 });
 
 /* ════════════════════════════════════════
