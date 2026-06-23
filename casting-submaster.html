@@ -1645,6 +1645,10 @@ function extractJSON(raw){
    ブラウザにキーを保存しないのでセキュリティが高い。 */
 async function callAI(content){
   if(!gasConfigured()) throw new Error('GAS URLが設定されていません');
+  // contentが配列（PDF+テキストの複合）の場合はそのまま、文字列の場合はテキストブロックに変換
+  var msgContent = Array.isArray(content)
+    ? content
+    : [{type:'text', text: String(content)}];
   var res;
   try{
     res = await fetch(GAS_URL, {
@@ -1652,7 +1656,7 @@ async function callAI(content){
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body: JSON.stringify({
         action:'callAI',
-        messages:[{role:'user', content: content}]
+        messages:[{role:'user', content: msgContent}]
       })
     });
   }catch(e){ throw new Error('ネットワークエラー: '+e.message); }
