@@ -79,6 +79,13 @@ a{text-decoration:none;color:inherit}
 .dl-val{font-size:13px;font-weight:700;color:var(--t2)}
 .remain{font-size:11px;font-weight:600;margin-top:2px}
 .rok{color:var(--green)}.rwa{color:var(--amber)}.rur{color:var(--red)}
+/* 締切カウントダウンバッジ */
+.cd-badge{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:800;letter-spacing:.02em;margin-bottom:8px}
+.cd-ok{background:#ECFDF5;color:#059669;border:1.5px solid #A7F3D0}
+.cd-warn{background:#FFFBEB;color:#D97706;border:1.5px solid #FCD34D}
+.cd-urgent{background:#FEF2F2;color:#DC2626;border:1.5px solid #FECACA;animation:pulse 1.5s ease-in-out infinite}
+.cd-today{background:#FEF2F2;color:#DC2626;border:1.5px solid #DC2626;font-size:13px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}
 .e-btn{padding:13px 24px;border-radius:var(--rs);font-size:14px;font-weight:800;border:none;white-space:nowrap;display:block;letter-spacing:.01em}
 .e-can{background:var(--blue);color:var(--w);box-shadow:0 2px 10px rgba(37,99,235,.32)}
 .e-can:active{background:#1D4ED8}
@@ -303,6 +310,20 @@ function render(){
       remHtml = '<div class="remain '+rc+'">残り'+dl+'日</div>';
     }
 
+    // カウントダウンバッジ（カード上部に目立つ形で表示）
+    var cdBadge = '';
+    if(dl !== null && !isExpired(j)){
+      if(dl === 0){
+        cdBadge = '<div class="cd-badge cd-today">⚡ 本日締切！</div>';
+      }else if(dl <= 3){
+        cdBadge = '<div class="cd-badge cd-urgent">🔥 締切まであと'+dl+'日</div>';
+      }else if(dl <= 7){
+        cdBadge = '<div class="cd-badge cd-warn">⏰ 締切まであと'+dl+'日</div>';
+      }else{
+        cdBadge = '<div class="cd-badge cd-ok">📅 締切まであと'+dl+'日</div>';
+      }
+    }
+
     var footHtml;
     if(me){
       footHtml = '<div class="e-done">'+sbBadge(me.status)+'<div class="e-done-n">担当者よりご連絡いたします</div></div>';
@@ -338,6 +359,7 @@ function render(){
     html +=
       '<div class="jc">'+
         '<div class="jc-head">'+
+          cdBadge+
           '<div class="jc-top"><div class="jc-title">'+esc(j.title)+'</div>'+priHtml+'</div>'+
           '<div class="jc-client">'+esc(j.client)+(j.product?' ／ <span class="jc-prod">'+esc(j.product)+'</span>':'')+'</div>'+
           (j.deadline ? tBar(p) : '')+
