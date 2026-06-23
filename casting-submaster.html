@@ -800,6 +800,39 @@ function renderSmGroups(){
       +'<div class="cred-row"><span class="cred-k">パスワード</span><span class="cred-v">'+esc(g.adminPassword)+'</span></div>'
       +'<div class="cred-row"><span class="cred-k">公開ページURL</span><span class="cred-v" style="color:var(--blue)">'+esc(pubUrl)+'</span></div>';
     card.appendChild(cred);
+
+    // ─ 金額入力ページ発行トグル ─
+    var priceEnabled = !!(g.priceEnabled);
+    var priceToken   = g.priceToken || ('tkn_'+g.id.slice(-8));
+    var priceUrl     = baseUrl+'casting-price.html?g='+g.id+'&token='+priceToken;
+    var priceSection = document.createElement('div');
+    priceSection.style.cssText='border:1px solid var(--g200);border-radius:var(--rs);padding:12px 14px;margin-bottom:12px;background:var(--g50)';
+    priceSection.innerHTML=
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">'
+        +'<div>'
+          +'<div style="font-size:13px;font-weight:700;color:var(--tx)">💰 金額入力ページを発行する</div>'
+          +'<div style="font-size:11px;color:var(--t3);margin-top:2px">ONにするとURL付きの専用ページが発行されます</div>'
+        +'</div>'
+        +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex-shrink:0">'
+          +'<span class="price-state-lbl" style="font-size:12px;font-weight:700;color:'+(priceEnabled?'var(--teal)':'var(--t3)')+';">'+(priceEnabled?'ON':'OFF')+'</span>'
+          +'<div class="toggle-wrap" style="position:relative;width:42px;height:24px">'
+            +'<input type="checkbox" class="price-toggle-cb" data-gid="'+esc(g.id)+'" data-token="'+esc(priceToken)+'" '+(priceEnabled?'checked':'')+' style="position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;z-index:1">'
+            +'<div class="price-track" style="position:absolute;inset:0;border-radius:12px;background:'+(priceEnabled?'var(--teal)':'var(--g300)')+';transition:background .2s"></div>'
+            +'<div class="price-thumb" style="position:absolute;top:3px;left:'+(priceEnabled?'21':'3')+'px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .2s"></div>'
+          +'</div>'
+        +'</label>'
+      +'</div>'
+      +'<div class="price-url-section" style="margin-top:12px;display:'+(priceEnabled?'block':'none')+'">'
+        +'<div style="background:var(--alt);border:1px solid #FCD34D;border-radius:6px;padding:8px 10px;font-size:11px;color:var(--g800);margin-bottom:8px;line-height:1.6">⚠️ URLを知っている人なら誰でもアクセスできます。担当者のみに共有してください。</div>'
+        +'<div style="background:var(--w);border:1px solid var(--g200);border-radius:var(--rs);padding:10px 12px">'
+          +'<div style="font-size:11px;font-weight:700;color:var(--t3);margin-bottom:5px;display:flex;justify-content:space-between;align-items:center">'
+            +'<span>金額入力ページURL</span>'
+            +'<button class="price-copy-btn" data-url="'+esc(priceUrl)+'" style="background:var(--glt);color:var(--green);border:none;border-radius:5px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer">URLをコピー</button>'
+          +'</div>'
+          +'<div style="font-size:11px;font-family:monospace;color:var(--blue);word-break:break-all;line-height:1.5">'+esc(priceUrl)+'</div>'
+        +'</div>'
+      +'</div>';
+    card.appendChild(priceSection);
     // 案件一覧ヘッダー
     var jobHead=document.createElement('div');
     jobHead.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px';
@@ -848,6 +881,49 @@ function renderSmGroups(){
   el.querySelectorAll('[data-sm-edit-jid]').forEach(function(b){b.addEventListener('click',function(){editSmJobInGroup(this.dataset.smEditJid);});});
   el.querySelectorAll('[data-sm-save-job]').forEach(function(b){b.addEventListener('click',function(){saveSmJobInGroup(this.dataset.smSaveJob);});});
 
+  // 金額入力ページ トグル
+  el.querySelectorAll('.price-toggle-cb').forEach(function(cb){
+    cb.addEventListener('change',function(){
+      var gid=this.dataset.gid;
+      var token=this.dataset.token;
+      var enabled=this.checked;
+      // トグルのビジュアル更新
+      var wrap=this.closest('.toggle-wrap');
+      if(wrap){
+        var track=wrap.querySelector('.price-track');
+        var thumb=wrap.querySelector('.price-thumb');
+        if(track)track.style.background=enabled?'var(--teal)':'var(--g300)';
+        if(thumb)thumb.style.left=enabled?'21px':'3px';
+      }
+      var lbl=this.closest('label').querySelector('.price-state-lbl');
+      if(lbl){lbl.textContent=enabled?'ON':'OFF';lbl.style.color=enabled?'var(--teal)':'var(--t3)';}
+      var urlSection=this.closest('.toggle-wrap').closest('[style]').parentElement.querySelector('.price-url-section');
+      if(!urlSection){urlSection=this.closest('div[style]').nextElementSibling;}
+      // priceSection内のurl-sectionを取得
+      var ps=this.closest('div[style*="border:1px solid var(--g200)"]');
+      if(!ps)ps=this.closest('[style]');
+      var us=ps?ps.querySelector('.price-url-section'):null;
+      if(us)us.style.display=enabled?'block':'none';
+      // グループデータを更新してGASに保存
+      var g=groups.find(function(x){return x.id===gid;});
+      if(g){
+        g.priceEnabled=enabled;
+        g.priceToken=token;
+        pushGroups(function(ok){showToast(ok?(enabled?'✅ 金額入力ページを発行しました':'🗑️ 金額入力ページを無効化しました'):'⚠️ サーバー保存に失敗しました');});
+      }
+    });
+  });
+
+  // URLコピー
+  el.querySelectorAll('.price-copy-btn').forEach(function(b){
+    b.addEventListener('click',function(){
+      var url=this.dataset.url;
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(url).then(function(){showToast('📋 URLをコピーしました');},function(){fbSmCopy(url);});
+      }else{fbSmCopy(url);}
+    });
+  });
+
   // タブ切り替え
   el.querySelectorAll('.sm-itab').forEach(function(tab){
     tab.addEventListener('click',function(){
@@ -870,23 +946,34 @@ function renderSmGroups(){
       var file=this.files[0]; if(!file)return;
       var card=this.closest('.gcard');
       var aiBar=card.querySelector('.sm-ai-pdf');
-      smSetAI(aiBar,'ai-l','"'+file.name+'" を解析中...');
-      var reader=new FileReader();
-      reader.onload=async function(){
-        try{
-          var b64=reader.result.split(',')[1];
-          var raw=await callAI([{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},{type:'text',text:buildPrompt('（添付PDFを解析してください）')}]);
-          var p=extractJSON(raw);if(!p)throw new Error('JSONの取り出しに失敗しました');
-          smFillForm(card,p);
-          // 手動入力タブに切り替え
-          card.querySelectorAll('.sm-itab').forEach(function(t){t.classList.toggle('on',t.dataset.smit==='manual');});
-          card.querySelectorAll('.sm-it-pdf,.sm-it-text,.sm-it-manual').forEach(function(pn){pn.style.display='none';});
-          var m=card.querySelector('.sm-it-manual');if(m)m.style.display='block';
-          smSetAI(aiBar,'ai-ok','✅ 解析完了！内容を確認して「追加」を押してください');
-        }catch(e){smSetAI(aiBar,'ai-err','❌ '+e.message);}
-      };
-      reader.onerror=function(){smSetAI(aiBar,'ai-err','❌ ファイルの読み込みに失敗しました');};
-      reader.readAsDataURL(file);
+      // まずAPIキーの設定状態をGASで確認してから処理
+      smSetAI(aiBar,'ai-l','APIキーを確認中...');
+      fetch(GAS_URL+'?type=settings')
+        .then(function(r){return r.json();})
+        .then(function(sr){
+          var apiSet = sr.ok && sr.data && sr.data.settings && sr.data.settings.apiKeySet;
+          if(!apiSet){
+            smSetAI(aiBar,'ai-err','❌ APIキーが設定されていません。マスター管理画面の「設定」タブでAPIキーを入力してください。');
+            return;
+          }
+          smSetAI(aiBar,'ai-l','"'+file.name+'" を解析中...');
+          var reader=new FileReader();
+          reader.onload=async function(){
+            try{
+              var b64=reader.result.split(',')[1];
+              var raw=await callAI([{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},{type:'text',text:buildPrompt('（添付PDFを解析してください）')}]);
+              var p=extractJSON(raw);if(!p)throw new Error('JSONの取り出しに失敗しました');
+              smFillForm(card,p);
+              card.querySelectorAll('.sm-itab').forEach(function(t){t.classList.toggle('on',t.dataset.smit==='manual');});
+              card.querySelectorAll('.sm-it-pdf,.sm-it-text,.sm-it-manual').forEach(function(pn){pn.style.display='none';});
+              var m=card.querySelector('.sm-it-manual');if(m)m.style.display='block';
+              smSetAI(aiBar,'ai-ok','✅ 解析完了！内容を確認して「追加」を押してください');
+            }catch(e){smSetAI(aiBar,'ai-err','❌ '+e.message);}
+          };
+          reader.onerror=function(){smSetAI(aiBar,'ai-err','❌ ファイルの読み込みに失敗しました');};
+          reader.readAsDataURL(file);
+        })
+        .catch(function(){smSetAI(aiBar,'ai-err','❌ 接続エラーが発生しました。GAS URLを確認してください。');});
       this.value='';
     });
   });
@@ -898,8 +985,15 @@ function renderSmGroups(){
       var txt=(card.querySelector('.sm-paste-area').value||'').trim();
       if(!txt){showToast('テキストを貼り付けてください');return;}
       var aiBar=card.querySelector('.sm-ai-text');
-      smSetAI(aiBar,'ai-l','テキストを解析中...');
+      smSetAI(aiBar,'ai-l','APIキーを確認中...');
       try{
+        var sr=await fetch(GAS_URL+'?type=settings').then(function(r){return r.json();});
+        var apiSet=sr.ok&&sr.data&&sr.data.settings&&sr.data.settings.apiKeySet;
+        if(!apiSet){
+          smSetAI(aiBar,'ai-err','❌ APIキーが設定されていません。マスター管理画面の「設定」タブで入力してください。');
+          return;
+        }
+        smSetAI(aiBar,'ai-l','テキストを解析中...');
         var raw=await callAI([{type:'text',text:buildPrompt(txt)}]);
         var p=extractJSON(raw);if(!p)throw new Error('JSONの取り出しに失敗しました');
         smFillForm(card,p);
@@ -1910,6 +2004,11 @@ function openDov(eid){
   html+='</div>';
   html+='<div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:6px;margin-top:12px">管理メモ（内部用）</div>';
   html+='<textarea class="anote" data-eid="'+esc(eid)+'" placeholder="選考メモ・担当者向けメモ">'+esc(e.adminNote||'')+'</textarea>';
+  html+='<div id="line-copy-area" style="display:none;margin-top:14px;background:var(--glt);border:1.5px solid #A7F3D0;border-radius:var(--rs);padding:14px">'
+    +'<div style="font-size:12px;font-weight:800;color:var(--green);margin-bottom:8px">📱 LINEメッセージをコピー</div>'
+    +'<div id="line-msg-preview" style="font-size:12px;color:var(--t2);background:var(--w);border:1px solid var(--g200);border-radius:var(--rs);padding:10px;white-space:pre-wrap;line-height:1.7;margin-bottom:10px;max-height:160px;overflow-y:auto"></div>'
+    +'<button id="line-copy-btn" style="width:100%;padding:10px;background:var(--green);color:#fff;border:none;border-radius:var(--rs);font-size:13px;font-weight:800;cursor:pointer">📋 このメッセージをコピーする</button>'
+  +'</div>';
   html+='<div class="btn-row" style="margin-top:14px"><button class="btn btn-g" id="dov-close-inner">閉じる</button></div>';
 
   document.getElementById('dfi').innerHTML=html;
@@ -1917,6 +2016,11 @@ function openDov(eid){
   /* バインド */
   document.getElementById('dov-close-inner').addEventListener('click',closeDov);
   document.querySelector('.mail-btn').addEventListener('click',function(){openMailTo(this.dataset.eid);});
+  // 既に採用/見送り状態ならLINEコピーエリアを初期表示
+  if(e.status==='passed'||e.status==='rejected'){
+    var j0=jobs.find(function(x){return x.id===e.jobId;});
+    showLineCopyBtn(e, j0, e.status);
+  }
   document.querySelectorAll('.att-dl').forEach(function(btn){
     btn.addEventListener('click',function(){
       var e2=entries.find(function(x){return x.id===this.dataset.eid;}.bind(this));
@@ -1941,6 +2045,15 @@ function openDov(eid){
       updateEntryOnGas(e3, notify);
       if(notify) showToast('📧 通知メールを送信しました');
 
+      // 採用/見送りのときはLINEコピーボタンを表示
+      if(newStatus==='passed'||newStatus==='rejected'){
+        var j4=jobs.find(function(x){return x.id===e3.jobId;});
+        showLineCopyBtn(e3, j4, newStatus);
+      }else{
+        var lbtn=document.getElementById('line-copy-area');
+        if(lbtn) lbtn.style.display='none';
+      }
+
       document.querySelectorAll('.st-b').forEach(function(b){
         var c=SC[b.dataset.st]||SC.pending;var on=b.dataset.st===e3.status;
         b.style.background=on?c.bg:'';b.style.color=on?c.col:'';b.style.borderColor=on?c.col:'';
@@ -1956,6 +2069,55 @@ function openDov(eid){
 }
 
 function closeDov(){document.getElementById('dov').classList.remove('on');}
+
+/* ════════════════════════════════════════
+   LINEメッセージコピー
+════════════════════════════════════════ */
+function showLineCopyBtn(entry, job, status){
+  var area=document.getElementById('line-copy-area');
+  var preview=document.getElementById('line-msg-preview');
+  var copyBtn=document.getElementById('line-copy-btn');
+  if(!area||!preview||!copyBtn) return;
+  var msg=buildLineMsg(entry, job?job.title:'案件', status==='passed');
+  preview.textContent=msg;
+  area.style.display='block';
+  var newBtn=copyBtn.cloneNode(true);
+  copyBtn.parentNode.replaceChild(newBtn,copyBtn);
+  newBtn.addEventListener('click',function(){
+    var text=preview.textContent;
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){
+        showToast('📋 LINEメッセージをコピーしました');
+        newBtn.textContent='✅ コピーしました！';
+        setTimeout(function(){newBtn.textContent='📋 このメッセージをコピーする';},2500);
+      });
+    }else{
+      var ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;opacity:0';
+      document.body.appendChild(ta);ta.select();
+      try{document.execCommand('copy');showToast('📋 コピーしました');}catch(e){showToast('⚠️ コピーできませんでした');}
+      document.body.removeChild(ta);
+    }
+  });
+}
+
+function buildLineMsg(entry, jobTitle, isPassed){
+  var name=entry.name||'ご応募者';
+  if(isPassed){
+    return '【ご採用のご連絡】\n\n'
+      +name+' 様\n\n'
+      +'この度は「'+jobTitle+'」へのご応募、誠にありがとうございます。\n\n'
+      +'慎重に選考した結果、ぜひ '+name+' 様にお願いしたいと思い、ご連絡いたしました。\n\n'
+      +'詳細につきましては、別途ご連絡させていただきます。\n\n'
+      +'どうぞよろしくお願いいたします。\nHUMEDIAジャパン';
+  }else{
+    return '【選考結果のご連絡】\n\n'
+      +name+' 様\n\n'
+      +'この度は「'+jobTitle+'」へのご応募、誠にありがとうございます。\n\n'
+      +'厳正なる選考の結果、誠に残念ながら今回はご期待に沿えない結果となりました。\n\n'
+      +'今後ともご縁がございましたら、またの機会にご応募いただければ幸いです。\n\n'
+      +'どうぞよろしくお願いいたします。\nHUMEDIAジャパン';
+  }
+}
 
 function openMailTo(eid){
   var e=entries.find(function(x){return x.id===eid;});
