@@ -655,6 +655,7 @@ function updBadge(){var c=entries.filter(function(e){return e.status==='pending'
    ログイン
 ════════════════════════════════════════ */
 
+/* セッション：「ログイン状態を保持する」ONなら有効期限なし */
 function tryAutoLogin(){
   try{
     var s=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');
@@ -677,9 +678,8 @@ function doLogin(){
   if(u){
     currentUser=u;
     if(document.getElementById('l-rem').checked){
-      try{localStorage.setItem(SESSION_KEY,JSON.stringify({
-        email:em,password:pw
-      }));}catch(e){}
+      /* 有効期限なし — localStorageは明示的にログアウトするまで保持 */
+      try{localStorage.setItem(SESSION_KEY,JSON.stringify({email:em,password:pw}));}catch(e){}
     }else{
       try{localStorage.removeItem(SESSION_KEY);}catch(e){}
     }
