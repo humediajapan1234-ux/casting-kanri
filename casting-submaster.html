@@ -428,16 +428,16 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
     <div class="sub" id="sub-cfg">
       <div class="shd">⚙️ 設定</div>
       <div class="card">
-        <div style="font-size:14px;font-weight:800;color:var(--tx);margin-bottom:6px">🤖 Anthropic APIキー</div>
-        <div style="font-size:13px;color:var(--t3);margin-bottom:14px;line-height:1.6">テキスト貼り付け・PDF解析のAI機能を使うためのAPIキーを設定します。<br><a href="https://console.anthropic.com/" target="_blank" style="color:var(--blue)">console.anthropic.com</a> で取得できます。キーはこのブラウザにのみ保存されます。</div>
-        <div style="background:var(--alt);border:1px solid #FCD34D;border-radius:var(--rs);padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--g800);line-height:1.6">⚠️ AI解析は <strong>https:// のサイト（GitHub Pages 等）でのみ動作</strong>します。パソコンに保存したファイルを直接開いた場合（file://）は、ブラウザのセキュリティ制限で動作しません。</div>
-        <div class="fgrp" style="margin-bottom:14px">
-          <label class="flbl">APIキー（sk-ant-...）</label>
-          <input class="fi" id="api-key-input" type="password" placeholder="sk-ant-api03-...">
+        <div style="font-size:14px;font-weight:800;color:var(--tx);margin-bottom:6px">🤖 Anthropic APIキー（マスターが一元管理）</div>
+        <div style="font-size:13px;color:var(--t3);margin-bottom:10px;line-height:1.6">
+          APIキーはマスター管理画面で設定・管理されています。<br>
+          ここでの設定は不要です。マスターがキーを設定すれば自動的に使えます。
         </div>
-        <div style="display:flex;gap:10px">
-          <button id="save-api-btn" style="padding:10px 20px;background:var(--blue);color:var(--w);border-radius:var(--rs);font-size:13px;font-weight:700;border:none;cursor:pointer;font-family:inherit">保存する</button>
-          <button id="clear-api-btn" style="padding:10px 20px;background:var(--rlt);color:var(--red);border-radius:var(--rs);font-size:13px;font-weight:700;border:none;cursor:pointer;font-family:inherit">削除する</button>
+        <div id="api-key-status-sm" style="background:var(--glt);border:1px solid #A7F3D0;border-radius:var(--rs);padding:10px 14px;font-size:13px;color:var(--green);font-weight:700;display:none">
+          ✅ APIキーが設定されています（マスターが管理）
+        </div>
+        <div id="api-key-notset-sm" style="background:var(--alt);border:1px solid #FCD34D;border-radius:var(--rs);padding:10px 14px;font-size:13px;color:var(--g800);display:none">
+          ⚠️ APIキーが設定されていません。マスター管理画面の「設定」でキーを入力してください。
         </div>
         <div id="api-status" style="margin-top:10px;font-size:13px;display:none"></div>
       </div>
@@ -526,15 +526,33 @@ function pullData(cb){
     .then(function(r){return r.json();})
     .then(function(res){
       if(res.ok){
-        var allJobs    = res.data.jobs    || [];
-        var allEntries = res.data.entries || [];
-        groups         = res.data.groups  || [];
+        var allJobs    = res.data.jobs     || [];
+        var allEntries = res.data.entries  || [];
+        groups         = res.data.groups   || [];
         channels       = res.data.channels || [];
-        // channelJobsはサブマスターの担当グループのものだけ
+
+        // ★ 端末間同期の核心：GASのsubmastersから最新のgroupIdsを取得
+        var allSubs = res.data.submasters || [];
+        if(currentUser && currentUser.id){
+          var mySub = allSubs.find(function(s){ return s.id === currentUser.id; });
+          if(mySub){
+            currentGroupIds = mySub.groupIds || [];
+            currentGroupId  = currentGroupIds.length ? currentGroupIds[0] : null;
+            // localStorageのキャッシュも更新
+            try{
+              var sess = JSON.parse(localStorage.getItem(SESSION_KEY)||'null');
+              if(sess){ sess.groupIds = currentGroupIds; localStorage.setItem(SESSION_KEY,JSON.stringify(sess)); }
+            }catch(e){}
+          }
+        }
+
+        // channelJobsは担当グループのものだけ
         var allCj = res.data.channel_jobs || [];
         channelJobs = currentGroupIds.length
           ? allCj.filter(function(cj){ return currentGroupIds.indexOf(cj.groupId||'')!==-1 || !cj.groupId; })
           : allCj;
+
+        // 担当グループの案件・エントリーのみ絞り込み
         if(currentGroupIds.length){
           jobs    = allJobs.filter(function(j){return currentGroupIds.indexOf(j.groupId||'')!==-1;});
           entries = allEntries.filter(function(e){return currentGroupIds.indexOf(e.groupId||'')!==-1;});
@@ -587,12 +605,13 @@ function updBadge(){var c=entries.filter(function(e){return e.status==='pending'
 function tryAutoLogin(){
   try{
     var s=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');
-    if(!s)return false;
-    if(s.submasterId && s.submasterName && s.groupIds){
+    if(!s||!s.email||!s.password)return false;
+    if(s.submasterId && s.submasterName){
       currentUser={email:s.email,password:s.password,name:s.submasterName,id:s.submasterId};
-      currentGroupIds=s.groupIds;
-      currentGroupId=s.groupIds.length?s.groupIds[0]:null;
-      showApp(currentUser); return true;
+      currentGroupIds=s.groupIds||[];
+      currentGroupId=currentGroupIds.length?currentGroupIds[0]:null;
+      showApp(currentUser);
+      return true;
     }
     localStorage.removeItem(SESSION_KEY);return false;
   }catch(e){return false;}
@@ -610,7 +629,6 @@ function doLogin(){
   if(!gasConfigured()){err.style.display='block';return;}
   document.getElementById('login-btn').textContent='確認中...';
   document.getElementById('login-btn').disabled=true;
-  // GASのsubmastersシートで認証
   fetch(GAS_URL+'?type=submasters')
     .then(function(r){return r.json();})
     .then(function(res){
@@ -623,10 +641,17 @@ function doLogin(){
       });
       if(sm){
         currentUser={email:em,password:pw,name:sm.name,id:sm.id};
+        // groupIdsは常にGASの値を使う（端末間同期の核心）
         currentGroupIds=sm.groupIds||[];
         currentGroupId=currentGroupIds.length?currentGroupIds[0]:null;
         if(document.getElementById('l-rem').checked){
-          try{localStorage.setItem(SESSION_KEY,JSON.stringify({email:em,password:pw,submasterId:sm.id,submasterName:sm.name,groupIds:currentGroupIds}));}catch(e){}
+          // localStorageにはgroupIdsを保存しない（GASが正）
+          // ただし素早い復元のため初回ヒントとして保存
+          try{localStorage.setItem(SESSION_KEY,JSON.stringify({
+            email:em,password:pw,
+            submasterId:sm.id,submasterName:sm.name,
+            groupIds:currentGroupIds
+          }));}catch(e){}
         }else{try{localStorage.removeItem(SESSION_KEY);}catch(e){}}
         showApp(currentUser);
       }else{err.style.display='block';}
@@ -707,13 +732,17 @@ document.getElementById('create-sm-group').addEventListener('click',function(){
   if(!name){showToast('⚠️ グループ名は必須です');return;}
   if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){showToast('⚠️ 正しいメールアドレスを入力してください');return;}
   if(!pw){showToast('⚠️ パスワードを入力または再生成してください');return;}
-  if(groups.some(function(g){return (g.adminEmail||'').toLowerCase()===email.toLowerCase();})){
-    showToast('⚠️ このメールアドレスは既に使われています');return;
-  }
   var g={id:genId(),name:name,adminEmail:email,adminPassword:pw,
     submasterId:(currentUser?currentUser.id:''),createdAt:new Date().toISOString()};
   groups.push(g);
   currentGroupIds.push(g.id);
+  // ★ GASのsubmastersにgroupIdsを保存（端末間同期の核心）
+  if(gasConfigured() && currentUser && currentUser.id){
+    fetch(GAS_URL, {method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action:'updateSubmasterGroups',
+        submasterId:currentUser.id, groupIds:currentGroupIds})}).catch(function(){});
+  }
+  // localStorageも更新
   try{var sess=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');
     if(sess){sess.groupIds=currentGroupIds;localStorage.setItem(SESSION_KEY,JSON.stringify(sess));}}catch(e){}
   document.getElementById('sm-g-name').value='';
@@ -983,6 +1012,12 @@ function delSmGroup(id){
   if(!confirm('グループ「'+g.name+'」を削除しますか？\n案件('+gJ+'件)のデータはそのまま残りますが、担当者はログインできなくなります。'))return;
   groups=groups.filter(function(x){return x.id!==id;});
   currentGroupIds=currentGroupIds.filter(function(i){return i!==id;});
+  // ★ GASのsubmastersのgroupIdsも更新（端末間同期）
+  if(gasConfigured() && currentUser && currentUser.id){
+    fetch(GAS_URL, {method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action:'updateSubmasterGroups',
+        submasterId:currentUser.id, groupIds:currentGroupIds})}).catch(function(){});
+  }
   try{var sess=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');
     if(sess){sess.groupIds=currentGroupIds;localStorage.setItem(SESSION_KEY,JSON.stringify(sess));}}catch(e){}
   pushGroups(function(ok){showToast(ok?'🗑️ グループを削除しました':'⚠️ サーバー保存に失敗しました');});
@@ -1044,10 +1079,20 @@ function smFillForm(card, p){
 
 
 function checkApiNotice(){
-  var n=document.getElementById('api-notice');
-  if(n) n.style.display=getApiKey()?'none':'block';
-  var inp=document.getElementById('api-key-input');
-  if(inp&&getApiKey()) inp.value=getApiKey();
+  // サブマスターではAPIキーの設定状態をGASから取得して表示
+  if(!gasConfigured()) return;
+  fetch(GAS_URL+'?type=settings')
+    .then(function(r){return r.json();})
+    .then(function(res){
+      var set = res.ok && res.data && res.data.settings && res.data.settings.apiKeySet;
+      var el1 = document.getElementById('api-key-status-sm');
+      var el2 = document.getElementById('api-key-notset-sm');
+      if(el1) el1.style.display = set ? 'block' : 'none';
+      if(el2) el2.style.display = set ? 'none' : 'block';
+      // 案件追加フォームのAIボタン通知
+      var n = document.getElementById('api-notice');
+      if(n) n.style.display = set ? 'none' : 'block';
+    }).catch(function(){});
 }
 
 /* ════════════════════════════════════════
@@ -1336,7 +1381,6 @@ function openPubModal(jid){
   var j=jobs.find(function(x){return x.id===jid;}); if(!j)return;
   var fi=document.getElementById('pub-fi'); if(!fi)return;
 
-  // このジョブの既存配信情報
   var myCjs=channelJobs.filter(function(cj){return cj.sourceJobId===jid;});
 
   var chOptions=channels.map(function(ch){
@@ -1345,28 +1389,43 @@ function openPubModal(jid){
   }).join('');
 
   fi.innerHTML=
+    // 元案件の確認
     '<div style="background:var(--g50);border-radius:var(--rs);padding:12px 14px;margin-bottom:16px;border:1px solid var(--g200)">'
+      +'<div style="font-size:11px;font-weight:700;color:var(--t3);margin-bottom:4px">元の案件</div>'
       +'<div style="font-size:14px;font-weight:800;color:var(--tx)">'+esc(j.title)+'</div>'
-      +'<div style="font-size:12px;color:var(--t3);margin-top:2px">元の報酬：'+esc(j.budget||'未設定')+'</div>'
+      +'<div style="font-size:13px;color:var(--t3);margin-top:4px">元の報酬：<strong style="color:var(--tx)">'+esc(j.budget||'未設定')+'</strong></div>'
     +'</div>'
-    +'<div class="fgrp" style="margin-bottom:14px"><label class="flbl">配信先チャンネル <span style="color:var(--red)">*</span></label>'
+    // チャンネル選択
+    +'<div class="fgrp" style="margin-bottom:16px"><label class="flbl">配信先チャンネル（公開ページ）<span style="color:var(--red)">*</span></label>'
       +(channels.length
         ? '<select class="fi" id="pub-ch-sel">'+chOptions+'</select>'
         : '<div style="font-size:13px;color:var(--red);padding:10px;background:var(--rlt);border-radius:var(--rs)">チャンネルがありません。メインマスターでチャンネルを作成してください。</div>'
       )
     +'</div>'
-    +'<div style="font-size:13px;font-weight:800;color:var(--t2);margin-bottom:10px">📝 公開時の条件を設定（変更したい項目だけ入力）</div>'
-    +'<div class="fgrp" style="margin-bottom:12px"><label class="flbl">タイトル（変更する場合）</label>'
-      +'<input class="fi" id="pub-title" placeholder="空欄＝元案件のタイトルをそのまま使用" value="'+esc(j.title)+'"></div>'
-    +'<div class="fgrp" style="margin-bottom:12px"><label class="flbl">報酬・金額（変更する場合）</label>'
-      +'<input class="fi" id="pub-budget" placeholder="例：12万円／¥120,000（税込）" value="'+esc(j.budget||'')+'"></div>'
-    +'<div class="fgrp" style="margin-bottom:12px"><label class="flbl">案件詳細（変更する場合）</label>'
-      +'<textarea class="fi" id="pub-desc" rows="4" placeholder="空欄＝元案件の詳細をそのまま使用">'+esc(j.desc||'')+'</textarea></div>'
-    +'<div class="fgrp" style="margin-bottom:18px"><label class="flbl">エントリー前の注意事項（変更する場合）</label>'
-      +'<textarea class="fi" id="pub-guide" rows="2" placeholder="空欄＝元案件の注意事項をそのまま使用">'+esc(j.entryGuide||'')+'</textarea></div>'
+    // ★ 金額のみ編集（メインの編集項目として強調）
+    +'<div style="background:var(--alt);border:2px solid #FCD34D;border-radius:var(--rs);padding:14px;margin-bottom:16px">'
+      +'<div style="font-size:13px;font-weight:800;color:var(--amber);margin-bottom:8px">💰 公開ページに表示する金額を設定</div>'
+      +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px;line-height:1.6">ここで設定した金額が公開ページに表示されます。元案件の金額とは別に管理されます。</div>'
+      +'<div class="fgrp">'
+        +'<label class="flbl">公開する報酬・金額 <span style="color:var(--red)">*</span></label>'
+        +'<input class="fi" id="pub-budget" placeholder="例：12万円／¥120,000（税込）" value="'+esc(j.budget||'')+'" style="font-size:15px;font-weight:700">'
+      +'</div>'
+    +'</div>'
+    // タイトル・詳細は折りたたみ（任意変更）
+    +'<details style="margin-bottom:16px">'
+      +'<summary style="font-size:13px;font-weight:700;color:var(--t2);cursor:pointer;padding:8px 0">▶ その他の条件を変更する（任意）</summary>'
+      +'<div style="padding-top:10px">'
+        +'<div class="fgrp" style="margin-bottom:10px"><label class="flbl">タイトル</label>'
+          +'<input class="fi" id="pub-title" placeholder="空欄＝元案件のタイトルをそのまま使用" value="'+esc(j.title)+'"></div>'
+        +'<div class="fgrp" style="margin-bottom:10px"><label class="flbl">案件詳細</label>'
+          +'<textarea class="fi" id="pub-desc" rows="4" placeholder="空欄＝元案件の詳細をそのまま使用">'+esc(j.desc||'')+'</textarea></div>'
+        +'<div class="fgrp"><label class="flbl">エントリー前の注意事項</label>'
+          +'<textarea class="fi" id="pub-guide" rows="2" placeholder="空欄＝元案件の注意事項をそのまま使用">'+esc(j.entryGuide||'')+'</textarea></div>'
+      +'</div>'
+    +'</details>'
     +'<div class="btn-row">'
       +'<button class="btn btn-g" onclick="closePubOv()">キャンセル</button>'
-      +'<button class="btn" style="background:var(--teal);color:#fff" id="pub-submit-btn" data-jid="'+esc(jid)+'">このチャンネルに配信する 📡</button>'
+      +'<button class="btn" style="background:var(--teal);color:#fff" id="pub-submit-btn" data-jid="'+esc(jid)+'">📡 この内容で公開ページに配信する</button>'
     +'</div>';
 
   document.getElementById('pub-submit-btn').addEventListener('click', function(){
@@ -1382,8 +1441,9 @@ function submitPublish(jid){
   var chSel=document.getElementById('pub-ch-sel');
   if(!chSel||!chSel.value){showToast('⚠️ 配信先チャンネルを選択してください');return;}
   var channelId=chSel.value;
+  var budget=(document.getElementById('pub-budget').value||'').trim();
+  if(!budget){showToast('⚠️ 公開する金額を入力してください');return;}
   var title =(document.getElementById('pub-title').value||'').trim()||j.title;
-  var budget=(document.getElementById('pub-budget').value||'').trim()||j.budget||'';
   var desc  =(document.getElementById('pub-desc').value||'').trim()||j.desc||'';
   var guide =(document.getElementById('pub-guide').value||'').trim()||j.entryGuide||'';
 
@@ -1480,23 +1540,26 @@ function extractJSON(raw){
   return null;
 }
 
+/* callAI: GAS経由でAnthropicを呼び出す
+   APIキーはGASのsettingsシートに保存されマスターが管理。
+   ブラウザにキーを保存しないのでセキュリティが高い。 */
 async function callAI(content){
-  var key=getApiKey();
-  if(!key)throw new Error('APIキーが設定されていません。「⚙️ 設定」からAnthropicのAPIキーを入力してください。');
+  if(!gasConfigured()) throw new Error('GAS URLが設定されていません');
   var res;
   try{
-    res=await fetch('https://api.anthropic.com/v1/messages',{
+    res = await fetch(GAS_URL, {
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:2500,system:'Output valid JSON only. No markdown. No explanation.',messages:[{role:'user',content:content}]})
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({
+        action:'callAI',
+        messages:[{role:'user', content: content}]
+      })
     });
-  }catch(e){throw new Error('ネットワークエラー: '+e.message);}
-  var raw=await res.text();
+  }catch(e){ throw new Error('ネットワークエラー: '+e.message); }
   var data;
-  try{data=JSON.parse(raw);}catch(e){throw new Error('APIの応答が不正です (HTTP '+res.status+')');}
-  if(data.error)throw new Error('APIエラー: '+(data.error.message||data.error.type));
-  if(!res.ok)throw new Error('HTTP '+res.status+' エラー');
-  return (data.content||[]).map(function(b){return b.text||'';}).join('');
+  try{ data = await res.json(); }catch(e){ throw new Error('GASの応答が不正です'); }
+  if(!data.ok) throw new Error(data.error || 'AI呼び出しに失敗しました');
+  return data.text || '';
 }
 
 function fillForm(p){
@@ -1952,25 +2015,6 @@ function dlPDF(){
   win.document.close();
   showToast('📄 PDFプレビューを開きました');
 }
-
-/* ════════════════════════════════════════
-   APIキー設定
-════════════════════════════════════════ */
-document.getElementById('save-api-btn').addEventListener('click',function(){
-  var k=(document.getElementById('api-key-input').value||'').trim();
-  if(!k){showToast('⚠️ APIキーを入力してください');return;}
-  try{localStorage.setItem(APIKEY_KEY,k);}catch(e){}
-  checkApiNotice();
-  var st=document.getElementById('api-status');st.style.display='block';st.style.color='var(--green)';st.textContent='✅ APIキーを保存しました';
-  showToast('✅ APIキーを保存しました');
-});
-document.getElementById('clear-api-btn').addEventListener('click',function(){
-  try{localStorage.removeItem(APIKEY_KEY);}catch(e){}
-  document.getElementById('api-key-input').value='';
-  checkApiNotice();
-  var st=document.getElementById('api-status');st.style.display='block';st.style.color='var(--red)';st.textContent='🗑️ APIキーを削除しました';
-  showToast('🗑️ APIキーを削除しました');
-});
 
 /* ════════════════════════════════════════
    起動
