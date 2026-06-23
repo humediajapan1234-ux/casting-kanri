@@ -480,16 +480,24 @@ textarea.fi{resize:vertical;min-height:80px;line-height:1.6}
     <div class="sub" id="sub-cfg">
       <div class="shd">⚙️ 設定</div>
       <div class="card">
-        <div style="font-size:14px;font-weight:800;color:var(--tx);margin-bottom:6px">🤖 Anthropic APIキー</div>
-        <div style="font-size:13px;color:var(--t3);margin-bottom:14px;line-height:1.6">テキスト貼り付け・PDF解析のAI機能を使うためのAPIキーを設定します。<br><a href="https://console.anthropic.com/" target="_blank" style="color:var(--blue)">console.anthropic.com</a> で取得できます。キーはこのブラウザにのみ保存されます。</div>
-        <div style="background:var(--alt);border:1px solid #FCD34D;border-radius:var(--rs);padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--g800);line-height:1.6">⚠️ AI解析は <strong>https:// のサイト（GitHub Pages 等）でのみ動作</strong>します。パソコンに保存したファイルを直接開いた場合（file://）は、ブラウザのセキュリティ制限で動作しません。</div>
-        <div class="fgrp" style="margin-bottom:14px">
-          <label class="flbl">APIキー（sk-ant-...）</label>
+        <div style="font-size:14px;font-weight:800;color:var(--tx);margin-bottom:6px">🤖 Anthropic APIキー（マスターが一元管理）</div>
+        <div style="font-size:13px;color:var(--t3);margin-bottom:10px;line-height:1.6">ここで設定したAPIキーはGAS（スプレッドシート）に保存され、サブマスターと管理画面が共有して使います。<br><a href="https://console.anthropic.com/" target="_blank" style="color:var(--blue)">console.anthropic.com</a> で取得できます。</div>
+        <div id="api-current" style="background:var(--glt);border:1px solid #A7F3D0;border-radius:var(--rs);padding:10px 14px;margin-bottom:12px;font-size:13px;display:none">
+          <span style="color:var(--green);font-weight:700">✅ 設定済み：</span>
+          <span id="api-key-masked" style="font-family:monospace;color:var(--t2)"></span>
+        </div>
+        <div id="api-notice" style="background:var(--alt);border:1.5px solid #FCD34D;border-radius:var(--rs);padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--g800);display:none">⚠️ まだAPIキーが設定されていません。</div>
+        <div class="fgrp" style="margin-bottom:12px">
+          <label class="flbl">新しいAPIキー（sk-ant-...）</label>
           <input class="fi" id="api-key-input" type="password" placeholder="sk-ant-api03-...">
         </div>
         <div style="display:flex;gap:10px">
-          <button id="save-api-btn" style="padding:10px 20px;background:var(--blue);color:var(--w);border-radius:var(--rs);font-size:13px;font-weight:700;border:none;cursor:pointer;font-family:inherit">保存する</button>
-          <button id="clear-api-btn" style="padding:10px 20px;background:var(--rlt);color:var(--red);border-radius:var(--rs);font-size:13px;font-weight:700;border:none;cursor:pointer;font-family:inherit">削除する</button>
+          <button id="save-api-btn" style="padding:10px 20px;background:var(--blue);color:var(--w);border-radius:var(--rs);font-size:13px;font-weight:700;border:none;cursor:pointer;font-family:inherit">GASに保存する</button>
+          <button id="clear-api-btn" style="padding:10px 16px;background:var(--rlt);color:var(--red);border-radius:var(--rs);font-size:13px;font-weight:700;border:1px solid var(--red);cursor:pointer;font-family:inherit">削除</button>
+        </div>
+        <div style="margin-top:12px;font-size:12px;color:var(--t3);line-height:1.7">
+          🔒 キーはGASに保存されます。確認時は末尾4文字のみ表示されます。<br>
+          ⚠️ AI解析はhttps://（GitHub Pages等）でのみ動作します。
         </div>
         <div id="api-status" style="margin-top:10px;font-size:13px;display:none"></div>
       </div>
@@ -603,6 +611,31 @@ function pushEntries(cb){
 
 function getApiKey(){try{return localStorage.getItem(APIKEY_KEY)||'';}catch(e){return '';}}
 
+/* ★ GASからAPIキーを取得してメモリにキャッシュ */
+var _cachedApiKey = '';
+function fetchAndCacheApiKey(cb){
+  if(!gasConfigured()){ if(cb)cb(''); return; }
+  fetch(GAS_URL, {method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({action:'getApiKey'})})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if(res.ok && res.apiKey){
+        _cachedApiKey = res.apiKey;
+        try{localStorage.setItem(APIKEY_KEY, res.apiKey);}catch(e){}
+      }
+      if(cb) cb(_cachedApiKey);
+    })
+    .catch(function(){ if(cb)cb(getApiKey()); });
+}
+
+/* AI解析時はGASからキーを取得してから使う */
+function getApiKeyForAI(cb){
+  // まずlocalStorageのキャッシュを確認
+  var cached = getApiKey();
+  if(cached){ cb(cached); return; }
+  // なければGASから取得
+  fetchAndCacheApiKey(cb);
+}
 /* ════════════════════════════════════════
    ユーティリティ
 ════════════════════════════════════════ */
@@ -621,6 +654,7 @@ function updBadge(){var c=entries.filter(function(e){return e.status==='pending'
 /* ════════════════════════════════════════
    ログイン
 ════════════════════════════════════════ */
+
 function tryAutoLogin(){
   try{
     var s=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');
@@ -643,7 +677,9 @@ function doLogin(){
   if(u){
     currentUser=u;
     if(document.getElementById('l-rem').checked){
-      try{localStorage.setItem(SESSION_KEY,JSON.stringify({email:em,password:pw}));}catch(e){}
+      try{localStorage.setItem(SESSION_KEY,JSON.stringify({
+        email:em,password:pw
+      }));}catch(e){}
     }else{
       try{localStorage.removeItem(SESSION_KEY);}catch(e){}
     }
@@ -693,10 +729,36 @@ function initAdmin(){
 }
 
 function checkApiNotice(){
-  var n=document.getElementById('api-notice');
-  if(n) n.style.display=getApiKey()?'none':'block';
-  var inp=document.getElementById('api-key-input');
-  if(inp&&getApiKey()) inp.value=getApiKey();
+  // GASからマスク済みキー情報を取得して表示
+  if(!gasConfigured()) return;
+  fetch(GAS_URL+'?type=settings')
+    .then(function(r){return r.json();})
+    .then(function(res){
+      var cur=document.getElementById('api-current');
+      var notice=document.getElementById('api-notice');
+      var masked=document.getElementById('api-key-masked');
+      if(res.ok && res.data && res.data.settings){
+        var s=res.data.settings;
+        if(s.apiKeySet){
+          if(cur){cur.style.display='block';}
+          if(notice){notice.style.display='none';}
+          if(masked){masked.textContent=s.apiKeyMasked;}
+          // localStorageのキャッシュをGASのキーで更新
+          fetchAndCacheApiKey(function(){});
+        }else{
+          if(cur){cur.style.display='none';}
+          if(notice){notice.style.display='block';}
+        }
+      }
+    })
+    .catch(function(){
+      // GASに繋がらない場合はlocalStorageのキャッシュで表示
+      var hasKey=!!getApiKey();
+      var cur=document.getElementById('api-current');
+      var notice=document.getElementById('api-notice');
+      if(cur)cur.style.display=hasKey?'block':'none';
+      if(notice)notice.style.display=hasKey?'none':'block';
+    });
 }
 
 /* ════════════════════════════════════════
@@ -956,9 +1018,6 @@ document.getElementById('create-group').addEventListener('click', function(){
   if(!name){showToast('⚠️ 管理ページ名は必須です');return;}
   if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){showToast('⚠️ 正しいメールアドレスを入力してください');return;}
   if(!pw){showToast('⚠️ パスワードを入力または自動生成してください');return;}
-  if(groups.some(function(g){return g.adminEmail&&g.adminEmail.toLowerCase()===email.toLowerCase();})){
-    showToast('⚠️ このメールアドレスは既に別のグループで使われています');return;
-  }
   var g={id:genId(), name:name, adminEmail:email, adminPassword:pw, createdAt:new Date().toISOString()};
   groups.push(g);
   document.getElementById('g-name').value='';
@@ -1219,11 +1278,6 @@ document.getElementById('create-sm').addEventListener('click', function(){
   if(!pw){showToast('⚠️ パスワードを入力または再生成してください');return;}
 
   // 重複チェック（グループアカウントとも）
-  var allEmails = submasters.map(function(s){return (s.email||'').toLowerCase();})
-    .concat(groups.map(function(g){return (g.adminEmail||'').toLowerCase();}));
-  if(allEmails.indexOf(email.toLowerCase())!==-1){
-    showToast('⚠️ このメールアドレスは既に使われています');return;
-  }
 
   // 担当グループIDを取得（チェックボックスから）
   var checkedGroupIds = [];
