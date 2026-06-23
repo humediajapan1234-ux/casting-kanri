@@ -602,10 +602,12 @@ function updBadge(){var c=entries.filter(function(e){return e.status==='pending'
 /* ════════════════════════════════════════
    ログイン
 ════════════════════════════════════════ */
+/* セッション：「ログイン状態を保持する」ONなら有効期限なし */
 function tryAutoLogin(){
   try{
     var s=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');
     if(!s||!s.email||!s.password)return false;
+    /* セッションに保存されたsubmasterIdで復元 */
     if(s.submasterId && s.submasterName){
       currentUser={email:s.email,password:s.password,name:s.submasterName,id:s.submasterId};
       currentGroupIds=s.groupIds||[];
@@ -629,24 +631,28 @@ function doLogin(){
   if(!gasConfigured()){err.style.display='block';return;}
   document.getElementById('login-btn').textContent='確認中...';
   document.getElementById('login-btn').disabled=true;
-  fetch(GAS_URL+'?type=submasters')
+  fetch(GAS_URL+'?type=all')
     .then(function(r){return r.json();})
     .then(function(res){
       document.getElementById('login-btn').textContent='ログイン →';
       document.getElementById('login-btn').disabled=false;
-      var subs=res.ok?(res.data.submasters||[]):[];
+      /* ★ グループ・サブマスター横断で同じID/PWを使い回せる
+         → submasters と groups の両方で一致を確認する */
+      var subs  = (res.ok && res.data.submasters) || [];
+      /* サブマスターとして一致するか確認 */
       var sm=subs.find(function(x){
         return x.email&&x.password&&
                x.email.toLowerCase()===em.toLowerCase()&&x.password===pw;
       });
       if(sm){
         currentUser={email:em,password:pw,name:sm.name,id:sm.id};
-        // groupIdsは常にGASの値を使う（端末間同期の核心）
         currentGroupIds=sm.groupIds||[];
         currentGroupId=currentGroupIds.length?currentGroupIds[0]:null;
+        /* グループのキャッシュも保持 */
+        groups   = res.data.groups   || [];
+        channels = res.data.channels || [];
         if(document.getElementById('l-rem').checked){
-          // localStorageにはgroupIdsを保存しない（GASが正）
-          // ただし素早い復元のため初回ヒントとして保存
+          /* 有効期限なし — 明示的にログアウトするまで保持 */
           try{localStorage.setItem(SESSION_KEY,JSON.stringify({
             email:em,password:pw,
             submasterId:sm.id,submasterName:sm.name,
