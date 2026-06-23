@@ -1501,22 +1501,26 @@ function extractJSON(raw){
 }
 
 async function callAI(content){
-  var key=getApiKey();
-  if(!key)throw new Error('APIキーが設定されていません。「⚙️ 設定」からAnthropicのAPIキーを入力してください。');
+  if(!gasConfigured()) throw new Error('GAS URLが設定されていません');
+  // contentが配列（PDF+テキストの複合）の場合はそのまま、文字列の場合はテキストブロックに変換
+  var msgContent = Array.isArray(content)
+    ? content
+    : [{type:'text', text: String(content)}];
   var res;
   try{
-    res=await fetch('https://api.anthropic.com/v1/messages',{
+    res = await fetch(GAS_URL, {
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:2500,system:'Output valid JSON only. No markdown. No explanation.',messages:[{role:'user',content:content}]})
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({
+        action:'callAI',
+        messages:[{role:'user', content: msgContent}]
+      })
     });
-  }catch(e){throw new Error('ネットワークエラー: '+e.message);}
-  var raw=await res.text();
+  }catch(e){ throw new Error('ネットワークエラー: '+e.message); }
   var data;
-  try{data=JSON.parse(raw);}catch(e){throw new Error('APIの応答が不正です (HTTP '+res.status+')');}
-  if(data.error)throw new Error('APIエラー: '+(data.error.message||data.error.type));
-  if(!res.ok)throw new Error('HTTP '+res.status+' エラー');
-  return (data.content||[]).map(function(b){return b.text||'';}).join('');
+  try{ data = await res.json(); }catch(e){ throw new Error('GASの応答が不正です'); }
+  if(!data.ok) throw new Error(data.error || 'AI呼び出しに失敗しました');
+  return data.text || '';
 }
 
 function fillForm(p){
