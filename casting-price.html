@@ -50,7 +50,16 @@ input,select,textarea{font-family:inherit;outline:none;-webkit-appearance:none;a
 .pub-time{color:var(--t3);font-size:11px;margin-left:4px}
 .btn-withdraw{background:transparent;border:none;color:var(--red);font-size:11px;cursor:pointer;margin-left:8px;text-decoration:underline}
 
-/* エラー・空 */
+/* 案件詳細アコーディオン */
+.detail-toggle{background:transparent;border:none;color:var(--blue);font-size:12px;font-weight:700;cursor:pointer;padding:6px 0;display:flex;align-items:center;gap:4px}
+.detail-toggle:hover{color:var(--teal)}
+.detail-body{display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--g100)}
+.detail-body.open{display:block}
+.detail-row{display:flex;gap:8px;margin-bottom:8px;font-size:12px}
+.detail-key{color:var(--t3);font-weight:700;min-width:68px;flex-shrink:0}
+.detail-val{color:var(--t2);line-height:1.6;white-space:pre-wrap;word-break:break-all}
+.detail-desc{font-size:12px;color:var(--t2);line-height:1.7;white-space:pre-wrap;background:var(--g50);border-radius:var(--rs);padding:10px 12px;margin-top:4px}
+.tag{display:inline-block;background:var(--blt);color:var(--blue);font-size:10px;padding:2px 8px;border-radius:4px;margin:2px 2px 0 0;font-weight:600}
 .error-box{background:var(--rlt);border:1.5px solid #FECACA;border-radius:var(--r);padding:28px 20px;text-align:center;margin-top:40px}
 .error-ic{font-size:36px;margin-bottom:10px}
 .error-t{font-size:15px;font-weight:800;color:var(--red);margin-bottom:6px}
@@ -156,6 +165,35 @@ function render(){
     var pubBudget   = pd ? pd.budget : '';
     var pubTime     = pd && pd.publishedAt ? new Date(pd.publishedAt).toLocaleString('ja-JP') : '';
 
+    // タグ
+    var tagsHtml = '';
+    if(j.tags && j.tags.length){
+      (Array.isArray(j.tags) ? j.tags : String(j.tags).split(',')).forEach(function(t){
+        if(t.trim()) tagsHtml += '<span class="tag">'+esc(t.trim())+'</span>';
+      });
+    }
+
+    // 種別ラベル
+    var typeLabel = {sns:'SNS/インフルエンサー',film:'映画/ドラマ/CM',model:'モデル/撮影',other:'その他'}[j.type]||j.type||'';
+
+    // 詳細アコーディオン
+    var detailHtml =
+      '<button class="detail-toggle" onclick="toggleDetail(\'det-'+esc(j.id)+'\')">'
+        +'<span id="arr-'+esc(j.id)+'">▶</span> 案件詳細を見る'
+      +'</button>'
+      +'<div class="detail-body" id="det-'+esc(j.id)+'">'
+        +(typeLabel ? '<div class="detail-row"><span class="detail-key">種別</span><span class="detail-val">'+esc(typeLabel)+'</span></div>' : '')
+        +(j.product ? '<div class="detail-row"><span class="detail-key">商品/作品名</span><span class="detail-val">'+esc(j.product)+'</span></div>' : '')
+        +(j.slots   ? '<div class="detail-row"><span class="detail-key">採用人数</span><span class="detail-val">'+esc(String(j.slots))+'名</span></div>' : '')
+        +(j.workdate? '<div class="detail-row"><span class="detail-key">稼働日</span><span class="detail-val">'+esc(j.workdate)+'</span></div>' : '')
+        +(j.deadline? '<div class="detail-row"><span class="detail-key">応募締切</span><span class="detail-val">'+esc(j.deadline)+'</span></div>' : '')
+        +(j.followerRange ? '<div class="detail-row"><span class="detail-key">フォロワー</span><span class="detail-val">'+esc(j.followerRange)+'</span></div>' : '')
+        +(j.url     ? '<div class="detail-row"><span class="detail-key">関連URL</span><span class="detail-val"><a href="'+esc(j.url)+'" target="_blank" rel="noopener" style="color:var(--blue)">'+esc(j.url)+'</a></span></div>' : '')
+        +(tagsHtml  ? '<div class="detail-row"><span class="detail-key">タグ</span><span class="detail-val">'+tagsHtml+'</span></div>' : '')
+        +(j.desc    ? '<div class="detail-row" style="flex-direction:column"><span class="detail-key" style="margin-bottom:4px">案件詳細</span><div class="detail-desc">'+esc(j.desc)+'</div></div>' : '')
+        +(j.entryGuide ? '<div class="detail-row" style="flex-direction:column;margin-top:8px"><span class="detail-key" style="margin-bottom:4px">エントリー時の注意事項</span><div class="detail-desc" style="background:var(--alt)">'+esc(j.entryGuide)+'</div></div>' : '')
+      +'</div>';
+
     html +=
       '<div class="job-card">'
         +'<div class="job-title">'+esc(j.title)+'</div>'
@@ -163,22 +201,38 @@ function render(){
           +(j.deadline ? '　締切：'+esc(j.deadline) : '')
           +'<span class="orig-budget">元の報酬：'+esc(j.budget||'未設定')+'</span>'
         +'</div>'
-        +'<div class="price-row">'
-          +'<input class="price-fi" id="pi-'+esc(j.id)+'" type="text" placeholder="例：12万円 / ¥120,000（税込）" value="'+esc(pubBudget)+'">'
-          +'<button class="btn-pub" data-jid="'+esc(j.id)+'" onclick="publish(\''+esc(j.id)+'\')">公開する</button>'
-        +'</div>'
-        +'<div class="pub-status" id="ps-'+esc(j.id)+'">'
-          +(isPublished
-            ? '<span class="pub-on">✅ 公開中 — '+esc(pubBudget)+'</span>'
-              +'<span class="pub-time">'+esc(pubTime)+'</span>'
-              +'<button class="btn-withdraw" onclick="withdraw(\''+esc(j.id)+'\')">取り下げ</button>'
-            : '<span class="pub-off">⚪ 未公開</span>'
-          )
+        +detailHtml
+        +'<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--g100)">'
+          +'<div style="font-size:12px;font-weight:700;color:var(--t2);margin-bottom:8px">💰 公開する金額を設定</div>'
+          +'<div class="price-row">'
+            +'<input class="price-fi" id="pi-'+esc(j.id)+'" type="text" placeholder="例：12万円 / ¥120,000（税込）" value="'+esc(pubBudget)+'">'
+            +'<button class="btn-pub" data-jid="'+esc(j.id)+'" onclick="publish(\''+esc(j.id)+'\')">公開する</button>'
+          +'</div>'
+          +'<div class="pub-status" id="ps-'+esc(j.id)+'">'
+            +(isPublished
+              ? '<span class="pub-on">✅ 公開中 — '+esc(pubBudget)+'</span>'
+                +'<span class="pub-time">'+esc(pubTime)+'</span>'
+                +'<button class="btn-withdraw" onclick="withdraw(\''+esc(j.id)+'\')">取り下げ</button>'
+              : '<span class="pub-off">⚪ 未公開</span>'
+            )
+          +'</div>'
         +'</div>'
       +'</div>';
   });
 
   el.innerHTML = html;
+}
+
+/* ─ 詳細アコーディオン ─ */
+function toggleDetail(id){
+  var el = document.getElementById(id);
+  if(!el) return;
+  var isOpen = el.classList.contains('open');
+  el.classList.toggle('open', !isOpen);
+  // 矢印の向きを変える
+  var jid = id.replace('det-','');
+  var arr = document.getElementById('arr-'+jid);
+  if(arr) arr.textContent = isOpen ? '▶' : '▼';
 }
 
 /* ─ 公開する ─ */
